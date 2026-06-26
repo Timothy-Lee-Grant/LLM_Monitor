@@ -1,10 +1,10 @@
 
 namespace LLM_MONITOR.server;
-public class TelemetryMiddlewear 
+public class TelemetryMiddleware 
 {
     private readonly RequestDelegate _next;
-    private ILogger<TelemetryMiddlewear> _logger;
-    public TelemetryMiddlewear(RequestDelegate next, ILogger<TelemetryMiddlewear> logger)
+    private ILogger<TelemetryMiddleware> _logger;
+    public TelemetryMiddleware(RequestDelegate next, ILogger<TelemetryMiddleware> logger)
     {
         _next = next;
         _logger = logger;

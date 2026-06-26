@@ -1,14 +1,13 @@
-from flask import Flask
+from flask import Flask, jsonify
 from lang import invoke_langchain
 
 app = Flask(__name__)
 
-@app.Route("/")
+@app.route("/")
 def Llm_Request():
-    invoke_langchain()
+    results = invoke_langchain()
+    return jsonify({"status":"success", "data":results})
 
-def main():
-    pass
 
 if __name__ == "main":
-    main()
+    app.run(host="0.0.0.0", port=5000, debug=True)

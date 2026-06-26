@@ -1,10 +1,22 @@
 services:
-  # Web Server
-  web_server:
-    container_name: web_app
+  dotnet_server:
+    build: 
+      context: ./server
+      dockerfile: dockerfile
+    container_name: dotnet_server
+    ports:
+      - "5000:80"
+    depends_on:
+      - langchain_service
+      #also we will need to add a database for logging
   
   langchain_service:
+    build: 
+      context: ./server
+      dockerfile: dockerfile
     container_name: langchain_service
+    ports:
+      - "5001:5000"
 
 
   # Web application service
@@ -25,21 +37,21 @@ services:
         condition: service_healthy
 
   # Database service
-  db:
-    image: postgres:15-alpine
-    container_name: postgres_db
-    environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=secret_pass
-      - POSTGRES_DB=mydb
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d mydb"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+#   db:
+#     image: postgres:15-alpine
+#     container_name: postgres_db
+#     environment:
+#       - POSTGRES_USER=admin
+#       - POSTGRES_PASSWORD=secret_pass
+#       - POSTGRES_DB=mydb
+#     volumes:
+#       - pgdata:/var/lib/postgresql/data
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U admin -d mydb"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 5
 
-# Persistent volumes definitions
-volumes:
-  pgdata:
+# # Persistent volumes definitions
+# volumes:
+#   pgdata:

@@ -8,16 +8,13 @@ public static class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        // builder.Services.AddReverseProxy()
-        //     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
-
         var app = builder.Build();
+
+
+        app.UseTelemetryMiddleware();
 
         app.UseAuthentication();
         app.UseAuthorization();
-
-        //app.UseMiddleware<TelemetryMiddlewear>();
-        app.UseTelemetryMiddlewear();
 
         app.MapControllers();
 
