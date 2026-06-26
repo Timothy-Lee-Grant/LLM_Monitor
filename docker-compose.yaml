@@ -1,4 +1,12 @@
 services:
+  # Web Server
+  web_server:
+    container_name: web_app
+  
+  langchain_service:
+    container_name: langchain_service
+
+
   # Web application service
   web:
     image: node:20-alpine
