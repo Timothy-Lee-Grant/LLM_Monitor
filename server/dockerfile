@@ -1,17 +1,17 @@
 # STAGE 1: Build and Compile
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build-env
+FROM mcr.microsoft.com/dotnet/sdk:11.0-preview AS build-env
 WORKDIR /src
 
 # Copy project files and restore dependencies to optimize layer caching
 COPY *.csproj ./
-RUN dotnet restore
+RUN dotnet restore --no-cache
 
 # Copy the remaining source code and compile the application
 COPY . ./
-RUN dotnet publish -c Release -o /app/publish --no-restore
+RUN dotnet publish -c Release -o /app/publish
 
 # STAGE 2: Production Runtime
-FROM mcr.microsoft.com/dotnet/aspnet:10.0
+FROM mcr.microsoft.com/dotnet/aspnet:11.0-preview
 WORKDIR /app
 
 # Copy the compiled binaries from the build stage
