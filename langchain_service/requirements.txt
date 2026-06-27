@@ -1,2 +1,3 @@
 flask
 langchain-core
+#swagger-ui-py

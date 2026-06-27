@@ -1,22 +1,34 @@
 from flask import Flask, jsonify
 from flask import request
 from lang import invoke_langchain
+#from swagger_ui import api_doc #TODO: implement this later
 
 app = Flask(__name__)
 
 @app.route("/")
 def Llm_Request():
-    results = invoke_langchain()
-    return jsonify({"status":"success", "data":results})
+    return jsonify({"status":"success", "data":"Hello!! You successfully reached my flask main API"})
 
-#TODO: Find out how to take in a JSON object and serialize, then parse, then work with that http request body 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        #Question: are we able to do: request.body and then try to do the deserialization?
-        return do_the_login()
-    else:
-        return show_the_login_form()
+#TODO: Define the body which the POST request is expecting
+#Conceptual question: What is a good way to showcase the expected schema of the request? Right now I have either and example (like "eia84hbfsl") or I can do the data type I am expecting. What is the industry standard?
+'''
+{
+    "userId":"eia84hbfsl",
+    "chatMessage":str
+}
+'''
+@app.route('/api/chat', methods=['POST'])
+def chat():
+    data = request.get_json()
+    try:
+        userId = data.get("userId")
+        chatMessage = data.get("chatMessage")
+    except:
+        return jsonify({"status":"failure"})
+
+    langchain_result = invoke_langchain(userId, chatMessage)
+
+    return jsonify( {"status":"success", "llmMessageResponse":langchain_result} )
 
 #TODO: Figure out what will actually be ran when I start up my docker compose file
 if __name__ == "__main__":
