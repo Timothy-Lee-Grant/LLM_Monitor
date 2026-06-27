@@ -12,7 +12,7 @@ services:
   
   langchain_service:
     build: 
-      context: ./server
+      context: ./langchain_service
       dockerfile: dockerfile
     container_name: langchain_service
     ports:

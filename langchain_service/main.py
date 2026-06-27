@@ -8,6 +8,6 @@ def Llm_Request():
     results = invoke_langchain()
     return jsonify({"status":"success", "data":results})
 
-
-if __name__ == "main":
+#TODO: Figure out what will actually be ran when I start up my docker compose file
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
