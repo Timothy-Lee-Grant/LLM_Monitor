@@ -6,6 +6,18 @@
 
 from langchain_core.language_models import FakeListChatModel
 
+# I am going to need to have a method that runs at start up and initializes all of the 
+# parameters which the user has selected. Then load all of those objects.
+# This way, each time an http request is instanciated, 
+def Init():
+    # if userSelectionModel == Ollama:
+    #     from langchain_ollama import ChatOllama
+    # if userSelectionModel == OpenAI:
+    #     from langchain_openai import ChatOpenAI
+    # if userSelectionModel == Azure:
+    #     from langchain_openai import AzureChatOpenAI
+    return
+
 
 #NOTE: As of right now, this server is STATEFUL!
 # It assumes that there is only one user (does not check based on userId)
