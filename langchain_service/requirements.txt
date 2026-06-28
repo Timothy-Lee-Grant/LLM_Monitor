@@ -3,3 +3,4 @@ langchain-core
 #swagger-ui-py
 langchain-community
 #langchain-openai
+langchain-ollama
