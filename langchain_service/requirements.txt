@@ -1,3 +1,5 @@
 flask
 langchain-core
 #swagger-ui-py
+langchain-community
+#langchain-openai

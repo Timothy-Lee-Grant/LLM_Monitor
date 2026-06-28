@@ -58,3 +58,12 @@ In addition I will also need to learn how to securely store those api keys.
 ## Other Ideas to Integrate
 
 Langgraph, Xunit testing, AI as a judge testing, LangSmith.
+
+## Thoughts on Scalability
+
+If I have my langchain docker contianer, and it is running flask. Then flask invokes a method to do the langchain processing. As of now I am assuming that we will have one person sending messages and it will be the same person. But once we want to change the systme to allow for multi-users, this architecture seems to force us into a bad spot.
+
+If the objects are created new each time when the function is invoked, that means that we are creating so many new object over and over. It also means that as we get multiple requests at the same time, that it will ___
+But then I was thinking about if we could do pooling of resources, but I don't know if this will mix up the data in between calls.
+
+I need to start considering how I will allocate resources such that I can transition into a muti-user system in the future, once I get to the point in this project that I am ready to implement that.

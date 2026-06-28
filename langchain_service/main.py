@@ -1,6 +1,7 @@
 from flask import Flask, jsonify
 from flask import request
 from lang import invoke_langchain
+import lang_practice
 #from swagger_ui import api_doc #TODO: implement this later
 
 app = Flask(__name__)
