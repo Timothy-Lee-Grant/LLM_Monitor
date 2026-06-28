@@ -1,13 +1,20 @@
 import os
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_code.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
+#from langchain_openai import ChatOpenAI
+#from langchain_anthropic import ChatAnthropic
+#from langchain_google_genai import ChatGoogleGenAI
+#from langchain_openai import AzureChatOpenAI
 from langchain_ollama import ChatOllama
 
 def OllamaInvokation():
     #this requires no api keys. 
     #defaults to hit: http://localhost:11434
     model = ChatOllama(model="llama3.2", temperature=0.7)
+
+
+
+
 
 def OpenAiInvokation():
     os.environ["OPENAI_API_KEY"] = 7
@@ -27,3 +34,11 @@ def OpenAiInvokation():
     # Rus the chain by passing the variable
     response = chain.invoke({"dish":"Lasagna"})
     print(response)
+
+def AzureInvoke():
+    model = AzureChatOpenAI(
+        azure_deployment="My_development_name",
+        api_version="My aip version",
+        azure_endpoint="my azure endpoint",
+        api_key="my api key"
+    )
