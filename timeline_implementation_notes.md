@@ -52,3 +52,9 @@ Eventually it would be cool to have multiple start up scripts. One script just d
 This would be cool because it would force me to create a pop up that the user can navigate, I will need to make it work for multiple operating systems (windows, mac, linux), and I will need to be able to navigate (so interact with the OS and the file system on their local machine).
 
 In addition I will also need to learn how to securely store those api keys.
+
+# June 28, 2026
+
+## Other Ideas to Integrate
+
+Langgraph, Xunit testing, AI as a judge testing, LangSmith.
