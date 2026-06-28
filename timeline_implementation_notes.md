@@ -42,3 +42,13 @@ public async Task<IActionResult> UploadImage(IFormFile avatar)
     return Ok();
 }
 ```
+
+## Implement vector Database
+As of right now, I don't have any vector database, so I need to be able to implement this within docker ecosystem. I will then need to make it such that I can load the data on start up if it does not exist already, and if it does exist, I will leave it. But this brings up an interesting questin of who is actually the one doing this? Is it the docker container that will be running pgvector, or is it one of the services in my application?
+
+## Implement pop up window on start up
+Eventually it would be cool to have multiple start up scripts. One script just does default parameters, another script does all testing parameters, ect. But then the 'real' one is a script that the user be able to get a pop up window. This pop up window will allow the user to configure the system by putting in their local model path location (so they would point physically to the path on their local set up), or they could point to the file contianing their api keys. (and this pop up will also let them configure all of the other settings which I will implement.)
+
+This would be cool because it would force me to create a pop up that the user can navigate, I will need to make it work for multiple operating systems (windows, mac, linux), and I will need to be able to navigate (so interact with the OS and the file system on their local machine).
+
+In addition I will also need to learn how to securely store those api keys.
