@@ -1,6 +1,6 @@
 import os
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_code.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser
 #from langchain_anthropic import ChatAnthropic
 #from langchain_google_genai import ChatGoogleGenAI
 
@@ -26,7 +26,7 @@ def TestingMethod(userId, userMessage):
     ])
     chain = prompt_template | model | StrOutputParser()
 
-    response = chain.invoke()
+    response = chain.invoke({})
     print(response)
     return
 

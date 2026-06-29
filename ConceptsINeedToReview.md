@@ -1,0 +1,4 @@
+- Docker Volumes
+- Tear down / build up of docker components without cluttering system
+- How the .sh start up build scripts are interacting with the docker containers.
+- 

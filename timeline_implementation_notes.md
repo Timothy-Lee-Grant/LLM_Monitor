@@ -67,3 +67,6 @@ If the objects are created new each time when the function is invoked, that mean
 But then I was thinking about if we could do pooling of resources, but I don't know if this will mix up the data in between calls.
 
 I need to start considering how I will allocate resources such that I can transition into a muti-user system in the future, once I get to the point in this project that I am ready to implement that.
+
+## Improve Speed
+I remember that I can load a model into memory and keep it there (assuming that your hardware has enough space in RAM to be able to keep that ollama model in there), this dramatically reduces the time needed each chat to get a response back.
