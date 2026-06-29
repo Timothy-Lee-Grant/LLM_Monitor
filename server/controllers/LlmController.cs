@@ -29,12 +29,6 @@ public class LlmController : ControllerBase
         // I now need to send another request to a different service
         // I need to create my own request and send it to the api endpoint.
 
-        // The compiler was angry at me for this. I am keeping it for documentation purposes for now to illustrate a lack of understanding in my C# abilities
-        // var bodyToLangchain = new 
-        // {
-        //     String UserMessage = requestBody.MessageToLlm;
-        // };
-
         // Setup your outgoing payload for your Python service
         var outgoingPayload = new 
         {

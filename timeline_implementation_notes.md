@@ -70,3 +70,11 @@ I need to start considering how I will allocate resources such that I can transi
 
 ## Improve Speed
 I remember that I can load a model into memory and keep it there (assuming that your hardware has enough space in RAM to be able to keep that ollama model in there), this dramatically reduces the time needed each chat to get a response back.
+
+## Docker Build Commands
+
+I noticed that I am constantly doing the pip install commands each time I run my startup script. I need to investigate if this is something I can optimize.
+
+## Vector Databases and Docker Volumes
+
+I will need to investigate how docker is instanciating volumens and how all of this works. I will need multiple databases (as of now, I know that I will at least need one vector database, and I will need at least one standard sql database for storing telemetry data of request). I will probably need more DB than this, but that is what I am immediately seeing as a need.

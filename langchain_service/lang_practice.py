@@ -28,7 +28,7 @@ def TestingMethod(userId, userMessage):
 
     response = chain.invoke({})
     print(response)
-    return
+    return response
 
 
 '''
