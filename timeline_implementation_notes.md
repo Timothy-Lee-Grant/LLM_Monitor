@@ -78,3 +78,17 @@ I noticed that I am constantly doing the pip install commands each time I run my
 ## Vector Databases and Docker Volumes
 
 I will need to investigate how docker is instanciating volumens and how all of this works. I will need multiple databases (as of now, I know that I will at least need one vector database, and I will need at least one standard sql database for storing telemetry data of request). I will probably need more DB than this, but that is what I am immediately seeing as a need.
+
+## Current Status
+
+This is the status according to Gemini, but I don't know if it is correct: Complete end-to-end backend orchestration successfully validated. The Docker Compose network stack (`ollama_service`, `langchain_service`, and `ollama_pull_model`) builds and fires up cleanly with no layer caching artifacts. The `qwen2.5:1.5b` model is successfully pulled, verified, and safely written to the persistent `ollama_data` volume. The Flask application routing is completely healthy, mapping host port `5001` to internal port `5000` and successfully exposing both the `/test` and `/api/chat` endpoints for instant local inference.
+
+## Issues I am struggling with to understand
+
+### Gaps in Docker
+- Docker Volumes
+- Tear down / build up of docker components without cluttering system
+- How the .sh start up build scripts are interacting with the docker containers.
+- I was told that I need to wait until docker has fully started up and gotten all of the information it needs before I attempt to invoke things. I was told that I can look at the logs to see this. But I don't understand the underlying concept of what is failing, why it is failing, or how to use the logs to deterimine the state of the system.
+- How does Docker Cashe interact with Docker Volumes?
+- I am able to start up my system with test_start_up.sh I think it is working, but I realized that I am really struggling to understand what is actually happening. I feel that I am just randomly doing the command, but I don't know how to troubleshoot AT ALL because I don't understand the actual docker system which is being build up right now. 
