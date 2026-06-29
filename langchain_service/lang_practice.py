@@ -12,7 +12,18 @@ def OllamaInvokation():
 
 
 
+'''
+Types of LangChain Components to investigate:
 
+Prompt Template
+Chat Model
+Output Parser
+Document Loader
+Text Splitter
+Vector Store
+Retriever
+Tools
+'''
 
 def OpenAiInvokation():
     from langchain_openai import ChatOpenAI
