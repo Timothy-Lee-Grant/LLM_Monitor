@@ -10,6 +10,21 @@ services:
       - langchain_service
       #also we will need to add a database for logging
   
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama_service
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+  
+  ollama-pull-model:
+    image: curlimages/curl:latest
+    container_name: ollama_pull_model
+    depends_on:
+      - ollama
+    entrypoint: ["sh", "-c", "until curl -s http://ollama:11434/api/tags > /dev/null; do sleep 1; done; echo 'Ollama is up, pulling qwen2.5:1.5b...'; curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"qwen2.5:1.5b\"}'" ]
+  
   langchain_service:
     build: 
       context: ./langchain_service
@@ -17,7 +32,13 @@ services:
     container_name: langchain_service
     ports:
       - "5001:5000"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      - ollama
 
+volumes:
+  ollama_data:
 
   # Web application service
   # web:

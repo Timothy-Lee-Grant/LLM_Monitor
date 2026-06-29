@@ -10,6 +10,25 @@ def OllamaInvokation():
     #defaults to hit: http://localhost:11434
     model = ChatOllama(model="llama3.2", temperature=0.7)
 
+def TestingMethod(userId, userMessage):
+    from langchain_ollama import ChatOllama
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    model = ChatOllama(
+        model = "qwen2.5:1.5b",
+        base_url=base_url,
+        temperature=0
+    )
+
+    # Now I need to get the components and put them together.
+    prompt_template = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful agent who loves poems"),
+        ("user", "What is your favorite time of year?")
+    ])
+    chain = prompt_template | model | StrOutputParser()
+
+    response = chain.invoke()
+    print(response)
+    return
 
 
 '''

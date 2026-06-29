@@ -31,6 +31,25 @@ def chat():
 
     return jsonify( {"status":"success", "llmMessageResponse":langchain_result} )
 
+
+@app.route('/test', methods=['POST'])
+def test_endpoint():
+    data = request.get_json() or {}
+    user_id = data.get("userId", "default_user")
+    message = data.get("chatMessage")
+
+    try:
+        result = TestingMethod(user_id, message)
+
+        return jsonify({
+            "status": "success",
+            "userId":user_id,
+            "input_received": message,
+            "agent_response": result
+        })
+    except Exception as e:
+        return jsonify({"status":"error", "message":str(e)}), 500
+
 #TODO: Figure out what will actually be ran when I start up my docker compose file
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
