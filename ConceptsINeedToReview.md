@@ -2,3 +2,4 @@
 - Tear down / build up of docker components without cluttering system
 - How the .sh start up build scripts are interacting with the docker containers.
 - I was told that I need to wait until docker has fully started up and gotten all of the information it needs before I attempt to invoke things. I was told that I can look at the logs to see this. But I don't understand the underlying concept of what is failing, why it is failing, or how to use the logs to deterimine the state of the system.
+- How does Docker Cashe interact with Docker Volumes?

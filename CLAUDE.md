@@ -8,6 +8,7 @@ My persona.md file tells you who I am, and my goals.
 - Do not change ANY of the actual code
 - Feel free to create a new markdown file in any of the folders within the Documentation folder.
 - When you generate a markdown file, it should be in the format of Min_Hour_Day_Month_Year-(Title), where min hour day month year are all numbers so the organization is easy.
+- Also feel free to update my persona.md file when you find new information about me which you think will be helpful to capture. My persona.md is a living document which keeps a wholistic idea of who I am, my current state, my goals, and the projects which I have worked on (and the skills which those projects demonstraite). I use this persona.md file in many projects, including one which gives the agent an understanding of my situation, so we can think of ideas for projects and other things I need to do to accomplish my goals (like getting into Microsoft as a software engineer). You can edit this persona.md file at any time if you see that a change would be helpful, regardless of if the user explicitly asks in their prompt.
 
 # Documentation Folders
 ## code_reviews
@@ -23,3 +24,12 @@ Documents in this folder are for archive purposes. I will use documents in here 
 
 ## targeted_implementations
 Documents in here should be based on research for skills that I should be learning. 
+
+## AI_Suggestions
+Documents in here should be where you give me suggestions on how I can improve my system. Feel free to give code examples within the markdown files you generate to show me what you are talking about. 
+
+The markdown files you put in this folder will be to help me get my system working if there are problems, notes about if you think I am going about something with bad architecture or if my way of implementing the system is not up to industry standards.
+
+In the markdown file, give step by step instructions to the developer on how to implement the solutions.
+
+This document allows me to get help with my system and get it working, but still allows me to learn every single thing which needs to be done because it is not done for me. I still need to explicitly implement all of the steps which you tell to me.
