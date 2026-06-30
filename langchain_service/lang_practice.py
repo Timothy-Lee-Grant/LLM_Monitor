@@ -5,10 +5,13 @@ from langchain_core.output_parsers import StrOutputParser
 #from langchain_google_genai import ChatGoogleGenAI
 from langchain_ollama import OllamaEmbeddings
 from langchain_postgres import PGVector
-
+from lang_tools import FindWeather, TellTime
 
 global lModel
 global store
+
+@tool
+tool_list = [FindWeather, TellTime]
 
 def Init():
     # Now I realize I need to worry about making these global
@@ -78,6 +81,35 @@ def TestRagSystem(userId:str, userMessage:str):
     response = chain.invoke({"message":userMessage})
 
     return response
+
+def TestToolUseSystem(user_id:str, user_message:str):
+    # now I want to be able to register tools and ask the llm to see if it needs them.
+
+    createdPrompt = ChatPromptTemplate(
+        ("system", "You are a agent that has access to tool."),
+        ("system", "Here are the available tools which you are allowed access to: {tool_list}"),
+        ("system", "If you would like to call a tool give the format of '\{tool_name\}'")
+        ("user", user_message)
+    )
+    chain = createdPrompt | lModel | StrOutputParser()
+    res = chain.invoke({})
+    #while res != # How would I even check to see if it is a JSON or not ....
+    max_itters = 5
+    curr_itters = 0
+    while res[0] != '{' and curr_itters < max_itters:
+        # Now I need to parse the string given to me so that I can get the tool name, then I need to invoke it.
+        tool_name = _ # This also indicates that I have a problem with if I am asked this type of string manipulation question for a leetcoding interview. I need to be good at these kinds of topics.....
+        # Now I guess I need try to invoke this tool based on the string name which I am given.......
+        # So now I need to know hwo to map a string value to the variable that I called it, so that I can invoke the function that it points to.... I really think this is incorrect.
+        tool_result = tool_list[foundIndex]
+        createdPrompt.append(("tool", tool_result))
+        chain = createdPrompt | lModel | StrOutputParser()
+        res = chain.invoke({})
+        curr_itters += 1
+    
+    return res
+
+
 
 '''
 Types of LangChain Components to investigate:

@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask import request
 from lang import invoke_langchain
 #import lang_practice
-from lang_practice import TestingMethod, TestRagSystem
+from lang_practice import TestingMethod, TestRagSystem, TestToolUseSystem, Init
 #from swagger_ui import api_doc #TODO: implement this later
 
 app = Flask(__name__)
@@ -48,6 +48,22 @@ def testRag_endpoint():
     except Exception as e:
         return jsonify({"status":"error", "message":str(e)}), 500
 
+@app.route('/test/tool_use', methods=['POST'])
+def testToolUse_endpoint():
+    data = request.get_json() or {}
+    user_id = data.get("userId", "default_user")
+    userMessage = data.get("chatMessage")
+    try:
+        response = TestToolUseSystem(user_id, userMessage)
+        return jsonify({
+            "status": "success",
+            "userId":user_id,
+            "input_received": userMessage,
+            "agent_response": response
+        })
+    except Exception as e:
+        return jsonify({"status":"error", "message":str(e)}), 500
+
 
 @app.route('/test', methods=['POST'])
 def test_endpoint():
@@ -69,4 +85,5 @@ def test_endpoint():
 
 #TODO: Figure out what will actually be ran when I start up my docker compose file
 if __name__ == "__main__":
+    Init()
     app.run(host="0.0.0.0", port=5000, debug=True)
