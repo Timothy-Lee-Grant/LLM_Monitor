@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask import request
 from lang import invoke_langchain
 #import lang_practice
-from lang_practice import TestingMethod
+from lang_practice import TestingMethod, TestRagSystem
 #from swagger_ui import api_doc #TODO: implement this later
 
 app = Flask(__name__)
@@ -31,6 +31,22 @@ def chat():
     langchain_result = invoke_langchain(userId, chatMessage)
 
     return jsonify( {"status":"success", "llmMessageResponse":langchain_result} )
+
+@app.route('/test/rag', methods=['POST'])
+def testRag_endpoint():
+    data = request.get_json() or {}
+    user_id = data.get("userId", "default_user")
+    userMessage = data.get("chatMessage")
+    try:
+        response = TestRagSystem(user_id, userMessage)
+        return jsonify({
+            "status": "success",
+            "userId":user_id,
+            "input_received": userMessage,
+            "agent_response": response
+        })
+    except Exception as e:
+        return jsonify({"status":"error", "message":str(e)}), 500
 
 
 @app.route('/test', methods=['POST'])
