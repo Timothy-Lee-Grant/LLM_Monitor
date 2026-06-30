@@ -31,6 +31,9 @@ def TestingMethod(userId, userMessage):
     return response
 
 
+def TestRagSystem():
+    
+
 '''
 Types of LangChain Components to investigate:
 
