@@ -2,8 +2,9 @@ from flask import Flask, jsonify
 from flask import request
 from lang import invoke_langchain
 #import lang_practice
-from lang_practice import TestingMethod, TestRagSystem, TestToolUseSystem, Init
+from lang_practice import TestingMethod, TestRagSystem, TestToolUseSystem, TestInit
 #from swagger_ui import api_doc #TODO: implement this later
+
 
 app = Flask(__name__)
 
@@ -83,7 +84,7 @@ def test_endpoint():
     except Exception as e:
         return jsonify({"status":"error", "message":str(e)}), 500
 
-#TODO: Figure out what will actually be ran when I start up my docker compose file
+#
 if __name__ == "__main__":
     Init()
     app.run(host="0.0.0.0", port=5000, debug=True)

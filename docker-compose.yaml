@@ -8,11 +8,11 @@ services:
       - "5000:80"
     depends_on:
       - langchain_service
-      #also we will need to add a database for logging
-  
+
   ollama:
     image: ollama/ollama:latest
     container_name: ollama_service
+    profiles: ["live"]
     ports:
       - "11434:11434"
     volumes:
@@ -21,10 +21,15 @@ services:
   ollama-pull-model:
     image: curlimages/curl:latest
     container_name: ollama_pull_model
+    profiles: ["live"]
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - ./pull-models.sh:/sys/init/pull-models.sh:ro
     depends_on:
       - ollama
-    entrypoint: ["sh", "-c", "until curl -s http://ollama:11434/api/tags > /dev/null; do sleep 1; done; echo 'Ollama is up, pulling qwen2.5:1.5b...'; curl -X POST http://ollama:11434/api/pull -d '{\"name\": \"qwen2.5:1.5b\"}'; curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"nomic-embed-text\"}'" ]
-  
+    entrypoint: ["/bin/sh", "sys/init/pull-models.sh"]
+
   langchain_service:
     build: 
       context: ./langchain_service
@@ -34,22 +39,35 @@ services:
       - "5001:5000"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - LLM_MODE=${LLM_MODE:-mock}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5:1.5b}
     depends_on:
-      - ollama
+      ollama:
+        condition: service_started
+      pgvector-service:
+        condition: service_healthy
 
   pgvector-service:
     image: pgvector/pgvector:pg16
     container_name: pgvector_service
-    environment: [POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB]
-    volumes: [pgdata:/var/lib/postgresql/data]
+    #environment: [POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB]
+    #TODO: make these passed in by .env file
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=secret_pass
+      - POSTGRES_DB=vectordb
+    volumes: 
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      test: ["CMD-SHELL", "pg_isready -U admin -d vectordb"]
       interval: 5s
       retries: 10
     
 
 volumes:
   ollama_data:
+  pgdata:
 
   # Web application service
   # web:

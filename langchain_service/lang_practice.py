@@ -6,6 +6,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_ollama import OllamaEmbeddings
 from langchain_postgres import PGVector
 from lang_tools import FindWeather, TellTime
+from models/ChatModelFactory import ChatModelFactory
 
 global lModel
 global store
@@ -13,11 +14,11 @@ global store
 @tool
 tool_list = [FindWeather, TellTime]
 
-def Init():
+def TestInit():
     # Now I realize I need to worry about making these global
     # or I could just put this entire thing in a class...
     # but then if I do it in a class, do I need to worry about the same kind of thing that I need to do in C# where I need to register the services with DI, and this way I can have the scoped object?
-    lModel = ChatOllama(model="llama3.2", temperature=0.7)
+    lModel = ChatModelFactory(model="llama3.2", temperature=0.7)
     embeddings = OllamaEmbeddings(model="nomic-embed-text", base_url=OLLAMA_BASE_URL)
     store = PGVector(embeddings=embeddings, connection=PG_CONN, collection_name="policies")
     store.add_documents(splitter.split_documents(loader.load()))
@@ -26,12 +27,12 @@ def OllamaInvokation():
     from langchain_ollama import ChatOllama
     #this requires no api keys. 
     #defaults to hit: http://localhost:11434
-    model = ChatOllama(model="llama3.2", temperature=0.7)
+    model = ChatModelFactory(model="llama3.2", temperature=0.7)
 
 def TestingMethod(userId, userMessage):
     from langchain_ollama import ChatOllama
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    model = ChatOllama(
+    model = ChatModelFactory(
         model = "qwen2.5:1.5b",
         base_url=base_url,
         temperature=0
