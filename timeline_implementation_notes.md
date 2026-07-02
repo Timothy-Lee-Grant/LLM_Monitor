@@ -107,6 +107,25 @@ I realized that my architecture is still not quite right. I need to have it such
 
 ## The Architecutre I am Thinking (for langchain)
 
-I am going to have chains, prompts, memory, and rag. The way that I am thinking about setting it is that prompts will be a long list of different types of promptMessage objects. So there will be different standardized prompts (such as the system prompt for the friendly llm which will respond to the user) there will be another promptMessage which is telling the llm that it is a judge to determine accuracy of other model's outputs. Another prompt will be to tell the llm to be a checker based on company policy to see if the user has violated policy in their chat, etc
+I am going to have chains, prompts, memory, and rag. 
 
-Models will be a factory which will give me this OllamaChat object. 
+### Prompt Messages
+The way that I am thinking about setting it is that prompts will be a long list of different types of promptMessage objects. So there will be different standardized prompts (such as the system prompt for the friendly llm which will respond to the user) there will be another promptMessage which is telling the llm that it is a judge to determine accuracy of other model's outputs. Another prompt will be to tell the llm to be a checker based on company policy to see if the user has violated policy in their chat, etc
+
+### Models
+
+Models will be a factory which will give me this OllamaChat object. Previously I had this object being created first by hardcoding, then now it is done by enviornment variables, but now I am realizing that the message objects should actually not a system property at all. The reason is that the user, in the specific message, should be the one to determine the model that they use (it should not be passed in through env vars). This means that the POST request which the user is giving to us should contain the model which they want to use, then when my api endpoint gets the user's post request, at that point it should ask for a model and my factory should return back a ChatModel object of that desired type.
+
+In the past I was worried about creating new objects so many times, but this is actually not a concern because the objects which we are creating are super light weight. They are just stings of configuartion. The large LLM weights are loaded into RAM in the ollama container, so it is the one managing the heavy memory objects.
+
+So what should this Models file actually give to my system? I think it should allow me to get a OllamaChat object (or a MockChatObject). And what does this allow my system to do? I should be able to get a user's message and then based on the model they want, I should be able to get this specialized connection object to my ollama service (or mocked). Then I will do other logic in different places (such as attaching prompt, attaching user's previous messages, attaching rag, invoking tools, etc)
+
+Now that I mentionedd MockChatObjects, I am realizing that those actually do need to be part of system parameters of the project (environment variables passed in). Because if I am in mock mode, I don't want to load any real models (and in fact, my docker container for the ollma service willnot even be up!!)
+
+### Memory
+
+### Chains
+
+### RAG
+
+### Tools
