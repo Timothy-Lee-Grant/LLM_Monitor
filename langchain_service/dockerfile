@@ -8,4 +8,7 @@ RUN pip install -r requirements.txt
 
 COPY . .
 
+# TODO: Investigate:
+# CMD ["uvicorn", "app.main:app"", --host", "0.0.0.0", "--port", "5000"] 
+# 'use an enterprise production ASGI server framework runner like Uvicorn' but this adds too much extra complexity for now.
 CMD ["python3", "main.py"]

@@ -25,6 +25,9 @@ if [[ "$MODE" == "live" ]]; then
     # echo "Taking images which we just build, and instanciating those images into actual running containers."
     # docker compose --profile live -p "$PROJECT" up --force-recreate -d
 
+    # NOTE: We are now enabling secondary composition override
+    # $GPU is called a dynamic string injector
+    # TODO: investigate layed docker compose setups, dynamic string injectors, and composition overrides.
     docker compose -p "$PROJECT" --profile live -f docker-compose.yaml $GPU build 
     echo "Instanciating live containers (Ollama active)"
     docker compose -p "$PROJECT" --profile live -f docker-compose.yaml $GPU up --force-recreate -d
