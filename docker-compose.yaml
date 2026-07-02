@@ -42,8 +42,6 @@ services:
       - LLM_MODE=${LLM_MODE:-mock}
       - LLM_MODEL=${LLM_MODEL:-qwen2.5:1.5b}
     depends_on:
-      ollama:
-        condition: service_started
       pgvector-service:
         condition: service_healthy
 
@@ -58,7 +56,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d vectordb"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d {POSTGRES_DB:-vectordb}"]
       interval: 5s
       retries: 10
     
