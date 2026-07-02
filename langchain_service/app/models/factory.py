@@ -4,7 +4,41 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
 
+
+
+
+
+# This should act just as a real llm but give back messages which are probabalistic out of a list of predefined message responses.
+# We will need to respect the shape which the response will need to be (so it will need to conform to the same shape which our normal ChatModel is. I think BaseChatModel will help with this.....)
+
+# TODO: I am concerned because I know that my project will have different models doing different things. 
+# For example, I will have a llm judge, a friendly assistant, a tool selector, a policy violation checker, etc
+# Therefore my responses can not be probabalistic wholly through return a single index of a list. (maybe I can have many different litst based on each of those llm types??)
+# OR should that be part of the system or some other compoent in my project???
 class MockChatModel(BaseChatModel):
+    _a = []
+
+class ModelFactory:
+    @staticmethod
+    def get_model():
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class MockChatModel_old(BaseChatModel):
     ''' A minimial, local mock llm wrapper for isolated pipeline validation.'''
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
@@ -18,7 +52,7 @@ class MockChatModel(BaseChatModel):
     def _llm_type(self) -> str:
         return "mock-stub-provider"
 
-class ModelFactory:
+class ModelFactory_old:
     @staticmethod
     def get_model() -> BaseChatModel:
         ''' determines model intialization strategy based on host environment variables '''
