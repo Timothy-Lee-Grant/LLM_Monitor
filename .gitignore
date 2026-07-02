@@ -62,7 +62,7 @@ ENV/
 *.safetensors
 *.onnx
 .cache/
-models/
+#models/        This is for weights, but I am having folders for model providers
 checkpoints/
 embeddings/
 vector_store/
