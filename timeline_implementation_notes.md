@@ -104,3 +104,9 @@ Reorganizing my files in the langchain service so that they are not just random 
 ## Incorrect Model Selection Parameter
 
 I realized that my architecture is still not quite right. I need to have it such that the user request is the one which will cause the selection of the model. It should be the user themselves that sends a POST request with their message which contains the model which they want to use. Then my system needs to handle that by loading that if not already loaded.
+
+## The Architecutre I am Thinking (for langchain)
+
+I am going to have chains, prompts, memory, and rag. The way that I am thinking about setting it is that prompts will be a long list of different types of promptMessage objects. So there will be different standardized prompts (such as the system prompt for the friendly llm which will respond to the user) there will be another promptMessage which is telling the llm that it is a judge to determine accuracy of other model's outputs. Another prompt will be to tell the llm to be a checker based on company policy to see if the user has violated policy in their chat, etc
+
+Models will be a factory which will give me this OllamaChat object. 

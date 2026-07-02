@@ -39,6 +39,7 @@ class ModelFactory:
 
 # This demonstrates a Multiton / Registry Pattern
 # But I will not use it because creating a ChatOllama object is not heavy.
+'''
 class ModelFactory2:
     _instances = {}
 
@@ -48,3 +49,4 @@ class ModelFactory2:
         if model_name not in cls._instances:
             cls._instances[model_name] = ChatOllama(model=model_name, temperature=0)
         return cls._instances[model_name]
+'''
