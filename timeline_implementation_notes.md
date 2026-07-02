@@ -92,3 +92,15 @@ This is the status according to Gemini, but I don't know if it is correct: Compl
 - I was told that I need to wait until docker has fully started up and gotten all of the information it needs before I attempt to invoke things. I was told that I can look at the logs to see this. But I don't understand the underlying concept of what is failing, why it is failing, or how to use the logs to deterimine the state of the system.
 - How does Docker Cashe interact with Docker Volumes?
 - I am able to start up my system with test_start_up.sh I think it is working, but I realized that I am really struggling to understand what is actually happening. I feel that I am just randomly doing the command, but I don't know how to troubleshoot AT ALL because I don't understand the actual docker system which is being build up right now. 
+
+# July 1, 2026
+
+## Reorganization of Files
+
+Reorganizing my files in the langchain service so that they are not just random api routes. Trying to make it a more professional architecutre.
+
+# July 2, 2026
+
+## Incorrect Model Selection Parameter
+
+I realized that my architecture is still not quite right. I need to have it such that the user request is the one which will cause the selection of the model. It should be the user themselves that sends a POST request with their message which contains the model which they want to use. Then my system needs to handle that by loading that if not already loaded.

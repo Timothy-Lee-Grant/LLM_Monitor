@@ -41,3 +41,7 @@ echo "Getting rid of those old images which no longer have any containers which 
 docker image prune -f
 
 echo "Up. Tail logs with: docker compose -p $PROJECT logs -f"
+
+# WARNING: This resets Docker Desktop to a fresh install state. 
+# It will delete your local container layers, but it destroys the bloat instantly.
+#rm -rf ~/Library/Containers/com.docker.docker
