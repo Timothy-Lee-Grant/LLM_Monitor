@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import os
 from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -43,3 +35,16 @@ class ModelFactory:
             )
         print("[Factory] Instantiating low resource mock validation layer", flush=True)
         return MockChatModel()
+    
+
+# This demonstrates a Multiton / Registry Pattern
+# But I will not use it because creating a ChatOllama object is not heavy.
+class ModelFactory2:
+    _instances = {}
+
+    @classmethod
+    def get_models(cls, codel_name: str) -> BaseChatModel:
+        # if we aready created a client for this model, reuse it.
+        if model_name not in cls._instances:
+            cls._instances[model_name] = ChatOllama(model=model_name, temperature=0)
+        return cls._instances[model_name]
