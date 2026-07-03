@@ -129,3 +129,11 @@ Now that I mentionedd MockChatObjects, I am realizing that those actually do nee
 ### RAG
 
 ### Tools
+
+## Future Things
+
+Need to learn about logging, telemetry collection (user tokens, violations, system status, (what else?)). This will need to be stored in a database and able to be queried by Graphana. I know that I was seeing OTelemetry mentioned in this space, but I don't know what it is.
+
+## Needed Addition!
+
+I just realized that I should abstract out the orchestration logic. I will add a new compoent to my project called 'orchestration_logic'.
