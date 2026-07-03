@@ -6,6 +6,19 @@
 
 from langchain_core.prompts import ChatPromptTemplate
 
+# I want to create a variable which will allow me to have all of the different types of valid
+# ChatTypes. In C I would do a typedef struct. but what should I do in python?
+
+ChatTypeList = ["Friendly Assistant", "LLM Judge", "Policy Violation Checker"]
+
+'''
+Now I am considering if I should have maybe instead of a list of strings, I should have a list of pointers, and
+those pointers will go to an object which has mock responses?
+
+But now I am getting concerned about ensuring decoupling....
+'''
+MockChatTypePointers = [MockFriendlyAssistant, MockLlmJudge, MockPolicyViolationChecker]
+
 
 def GetHappyEncouragingAssistentPrompt() -> ChatPromptTemplate:
     createdPrompt = ChatPromptTemplate(
@@ -37,7 +50,7 @@ def GetPolicyViolationCheckerPrompt() -> ChatPromptTemplate:
     # I know that there is something called asssistant, but I don't know the proper way to use it.
 
     # TODO: practice using assistant and tool in system prompt.
-    
+
     return createdPrompt
 
 # TODO: This has not yet been implemented in our system. I will eventually need to set up a evaluation component which will take the reponses of what our system is outputting and have a judge evaluate and score output so that we can log and test our system.
@@ -47,3 +60,34 @@ def GetLlmJudgePrompt() -> ChatPromptTemplate:
         ("system", "You are an AI judge to determine the quality of other llm outputs")
     )
     return createdPrompt
+
+
+MockFriendlyAssistant = [
+    "You asked a wonderful question. The capital of Oregon is Salem",
+    "Thank you for asking about how I am doing. I am doing wonderful"
+    # "",
+    # "",
+    # "",
+    # ""
+]
+
+# TODO: The structure and functionailty of the llm judge has not yet been defined.
+MockLlmJudge = [
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+]
+
+# TODO: Now that I am writing out policy violated messages. It is starting to make sense to me that I would want to have the llm output in the form of JSON, so I can get the parameters and see other things such as 
+# violated or not, but also I should have another field which is immediate_action_required which would cause a system alert to flag immenent dangerous actions which should escillated immediately to law enforcement.
+MockPolicyViolationChecker = [
+    "violated: The user is asking about how to build a bomb. This message violates the policy of anti-harm and the policy of assistance in dangerous or illegal activiites.",
+    "violated: The user is asking about how to hurt someone. This message violates the policy of anti-harm and the policy of assistance in dangerous or illegal activiites, along with potentially engaging in immediate physical attacks to others.",
+    "conformance: The user's message was about ways to fix a leaking pipe underneath their sink, this kind of question does not involve any kind of topic which is outlined as against the policy.",
+    "conformance: The user's message was about ways to cook a mean, this kind of question does not involve any kind of topic which is outlined as against the policy."
+    # "",
+    # ""
+]

@@ -19,6 +19,16 @@ from app.models.Instructions import TryGetOllamaModel
 class MockChatModel(BaseChatModel):
     _a = []
 
+    # Let me think about what I want for this method, then I hope it will be clear what I should do.
+    '''
+    This class is going to give the caller a object which is pretending to be a OllamaChat object.
+    First meta observation: I should think about things in terms of contracts. When I don't know what I should do. I should think about the question 'what is the contract of this method or class?'
+    This means that I will need to know what type of model the user is trying to get. This requires me to have a modelType parameter passed in.
+    Now I am thinking about where modelType should come from. To me it makes sense that it would be in the file that has the standard prompts because this is where the different types of chat types will be enumerated.
+    '''
+    def _generate(self, modelType):
+        pass
+
 class ModelFactory:
 
     knownPulledModels = {}
@@ -72,6 +82,9 @@ class ModelFactory:
 class MockChatModel_old(BaseChatModel):
     ''' A minimial, local mock llm wrapper for isolated pipeline validation.'''
 
+    # I am still shaky on undersanding the idea of **kwargs I know they are used so much in EVERY languae, but I dont know much about how argument variables. What are they, where are they passed in from, how do we manipulate them, etc.
+    # I think this idea scared me when I was first learning programming (in C) because it was something with a dynamic something (I think it had a ... inside of a function which took an indefinate number of items into it), like the printf(...)
+    # so when I first saw it I didn't understand it and was so confused. but now I am strong in the concepts so I should revisit it.
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         # always return a clean mock response structure instantly without calling out to the network (docker)
         mock_text = "[MOCK RESPONSE] Policy analysis evaluation bypassed. Environment configuration set to mock."
