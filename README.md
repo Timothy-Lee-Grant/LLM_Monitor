@@ -2,6 +2,19 @@
 
 The purpose of this project is to build a system which utilizes langchain to learn about and get the opportunity to demonstrate cababilities within this space that I am EXTREMELY interested in. I want all the actual code in this project to be my own, but I use Claude as a mentor who ONLY creates documentation (found in the Documentation folder), this is where I get evaluations on concepts that it feels I am weak or missing, code reviews, suggestions for targeting my specific goal of getting into **Microsoft** as a software engineer, and full lecture notes on those concepts which Claude has found that I am weak on.
 
+* Note: This project was developed 100% by me (not AI). Claude is explicitly prohibited from changing any code or fixing things, and is only acting as a code reviewer and as an analyzer of gaps in my knowledge to then generate lecture documents (found in the Documents folder) which I can study to learn and grow as an engineer.
+* Feel free to interregate me on ANY of the concepts found in this project
+
+# Concepts Implemented
+
+## General Software Engineering
+
+Docker, microservice architecture, middleware, client / server, http, endpoints, .....
+
+## AI Orchestration Concepts
+
+Vector database (ingesting documents, vectorizing documents, querying database for semantic top k closest elements), langchain, .....
+
 # Technologies Used
 
 ## Dotnet Server and Middleware
