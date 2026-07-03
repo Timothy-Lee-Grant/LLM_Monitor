@@ -1,11 +1,11 @@
 import os
-
+import random
 from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
 from app.models.Instructions import TryGetOllamaModel
-
+from app.prompts.MyPromptTemplates import MockChatTypeDictionary, number_of_chat_types
 
 
 
@@ -25,9 +25,22 @@ class MockChatModel(BaseChatModel):
     First meta observation: I should think about things in terms of contracts. When I don't know what I should do. I should think about the question 'what is the contract of this method or class?'
     This means that I will need to know what type of model the user is trying to get. This requires me to have a modelType parameter passed in.
     Now I am thinking about where modelType should come from. To me it makes sense that it would be in the file that has the standard prompts because this is where the different types of chat types will be enumerated.
+    Ok, I now went to my file called MyPromptTemplates and added a list of pointers to a list of string responses.
+    
+    I think the BaseChatModel is the type which is the 'shape' I keep talking about. So I need to find out how I can use that 
+    parent object to wrap this custom thing based on the user's modelType. But now I am also realizing that I need a way to map the
+    string modelType to the index in my MockChatTypePointers. So I might need to go change it to instead of a list of pointers to lists, to be dict of the pointers to the lists
     '''
     def _generate(self, modelType):
-        pass
+        mockResponsesList = MockChatTypeDictionary[modelType]
+        '''
+        I really don't know how to take this list and put it into a wrapper of the BaseChatModel.
+        I think this indicates a gap in my knowledge of understanding. Possibly with object orientated programming concepts???
+        '''
+
+        # I looked at an example for the two lines below
+        generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.random(0,number_of_chat_types)]))
+        return ChatResult(generations=[generation])
 
 class ModelFactory:
 

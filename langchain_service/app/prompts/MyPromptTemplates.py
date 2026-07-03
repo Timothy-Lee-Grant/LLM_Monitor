@@ -6,18 +6,7 @@
 
 from langchain_core.prompts import ChatPromptTemplate
 
-# I want to create a variable which will allow me to have all of the different types of valid
-# ChatTypes. In C I would do a typedef struct. but what should I do in python?
 
-ChatTypeList = ["Friendly Assistant", "LLM Judge", "Policy Violation Checker"]
-
-'''
-Now I am considering if I should have maybe instead of a list of strings, I should have a list of pointers, and
-those pointers will go to an object which has mock responses?
-
-But now I am getting concerned about ensuring decoupling....
-'''
-MockChatTypePointers = [MockFriendlyAssistant, MockLlmJudge, MockPolicyViolationChecker]
 
 
 def GetHappyEncouragingAssistentPrompt() -> ChatPromptTemplate:
@@ -61,6 +50,29 @@ def GetLlmJudgePrompt() -> ChatPromptTemplate:
     )
     return createdPrompt
 
+
+# It feels like the below section is not in the right spot because it feels like these two things (above and below) are very different, so I think they would need their own file.
+
+
+
+# I want to create a variable which will allow me to have all of the different types of valid
+# ChatTypes. In C I would do a typedef struct. but what should I do in python?
+number_of_chat_types = 3
+ChatTypeList = ["Friendly Assistant", "LLM Judge", "Policy Violation Checker"]
+
+'''
+Now I am considering if I should have maybe instead of a list of strings, I should have a list of pointers, and
+those pointers will go to an object which has mock responses?
+
+But now I am getting concerned about ensuring decoupling....
+'''
+MockChatTypePointers = [MockFriendlyAssistant, MockLlmJudge, MockPolicyViolationChecker]
+
+MockChatTypeDictionary = {
+    "friendly_assistent":MockFriendlyAssistant,
+    "llm_judge":MockLlmJudge,
+    "policy_violation_checker":MockPolicyViolationChecker
+    }
 
 MockFriendlyAssistant = [
     "You asked a wonderful question. The capital of Oregon is Salem",
