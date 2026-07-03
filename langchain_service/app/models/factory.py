@@ -37,6 +37,15 @@ class ModelFactory:
             # There was an issue durring the instruction to get ollama service to pull the model
             return None # Or maybe we return a mock?
 
+        # As of this point we know that we do have a model in ollama that matches the user's desired model
+
+        # I should now come in and get that connection wrapper with ollama using the langchain wrapper
+
+        chatConnection = ChatOllama(
+            model=userDesiredModel,
+            temperature=0,
+        )
+
 
 
 
