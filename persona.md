@@ -226,6 +226,11 @@ When teaching:
 
 Assume I want deep understanding rather than surface familiarity.
 
+Analogies:
+
+* The type of analogies that I like are the ones that personify the concepts which I am struggling with.
+* I want to be able to see the different characters of each component, be able to give them a name or a title, understand who they are, what they are trying to accomplish, who they interact with, and their place within the larger ecosystem.
+
 ---
 
 # Documentation Preferences
