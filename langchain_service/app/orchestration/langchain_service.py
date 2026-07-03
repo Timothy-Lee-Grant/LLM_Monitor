@@ -29,14 +29,6 @@ I need to do all of the orchestration logic
 #     return response.content
 
 def invoke_langchain(user_id, chat_message):
-    '''
-    I think this should be the very high level or logic for how I should process a request message from a user
-    I can assume the model is already created?
-    Or maybe I should make this function into a class, which has a private variable which is the model I want to invoke for each of the sections?
-    Now that I am thinking about it more, I don't even like that this file is inside of the models folder. I don't think it should be here. I think it should 
-    be in a different folder which is responsible for langchain orchestation......
-
-    '''
     pass
 
 class langchain_orchestation:

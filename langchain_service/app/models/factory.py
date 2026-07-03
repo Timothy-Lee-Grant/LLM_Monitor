@@ -6,7 +6,7 @@ from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
 from app.models.Instructions import TryGetOllamaModel
 from app.prompts.MyPromptTemplates import MockChatTypeDictionary, number_of_chat_types
-
+from langchain_ollama import OllamaEmbeddings
 
 
 # This should act just as a real llm but give back messages which are probabalistic out of a list of predefined message responses.
@@ -75,9 +75,28 @@ class ModelFactory:
 
 
     @staticmethod
-    def get_embedding_model():
+    def get_embedding_model(userDesiredModel:str):
         # nomic-embed-text
-        return None
+        # This is a new character (which is different from the other one we have known which is OllamaChatModel)
+        embeddings = OllamaEmbeddings(
+            model=userDesiredModel,
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+        )
+        return embeddings
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
