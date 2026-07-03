@@ -1,7 +1,7 @@
 
 
 
-
+import os
 import requests
 
 # Actually, would this be a good place for me to have my global dictionaries for this namespace
@@ -49,6 +49,10 @@ def TryGetOllamaChatModel(desired_model:str, base_url:str) -> bool:
         return False
     
 def TryGetOllamaEmbeddingModel(desired_model:str, base_url:str) -> bool:
+
+    if os.getenv("LLM_MODE") == "mock":
+        return True
+    
     # desired model might or might not be passed in. I don't know about what I want as of right now.
     # I think to get this project working I will decide to just hardcode it for now
     desired_model = "nomic-embed-text"
@@ -78,7 +82,63 @@ def TryGetOllamaEmbeddingModel(desired_model:str, base_url:str) -> bool:
 
     the other thing I am realizing is that this response should have other components (such as headder, cookies, etc), but it seems it is only the body?
     '''
-    response.json().get("models", [])
+    downloaded_models = response.json().get("models", [])
+
+    # Check if our desired model is in ollama
+
+    if desired_model not in downloaded_models:
+        # now we need to tell ollama to download it
+
+        payload = {
+            "model":desired_model,
+            "stream":False
+        }
+
+        # do a post request
+        # what is this request? It is a library, but it feels strange. What is the C# equivalent???
+        response = requests.post(f"{base_url}/api/pull", json=payload, timeout=None)
+
+        response.raise_for_status()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        # If we got the success, then ollama pulled the model
+
+        # this give me an opportunity to practice working with this response object
+        # first step, it is a string. I want a dict
+        # second step, it is now a dict, I want a list? Or am I trying to find if it was a success or not
+        # that would mean I want to find 'status'. but how would I do that? Where would I look in this response dict?
+        # so how do I search a dict? I look up the value by the key.... So lets do it!
+        # Below is my attempt (I think it is actually correct as well but a different way of getting the key). I will use the other way I saw online incase it is safer. but conceptually I might have gotten it?
+        # if response.json()["status"] == "success":
+        #     return True
+        # return False
+    
+        if response.json().get("status") == "success":
+            return True
+        return False
 
 
 
