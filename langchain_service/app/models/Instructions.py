@@ -1,6 +1,3 @@
-
-
-
 import os
 import requests
 
@@ -99,30 +96,6 @@ def TryGetOllamaEmbeddingModel(desired_model:str, base_url:str) -> bool:
         response = requests.post(f"{base_url}/api/pull", json=payload, timeout=None)
 
         response.raise_for_status()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
         # If we got the success, then ollama pulled the model
 

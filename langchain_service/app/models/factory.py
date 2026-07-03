@@ -43,8 +43,10 @@ class ModelFactory:
 
         chatConnection = ChatOllama(
             model=userDesiredModel,
-            temperature=0,
+            temperature=0
         )
+
+        return chatConnection
 
 
 
