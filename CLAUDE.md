@@ -6,6 +6,7 @@ My persona.md file tells you who I am, and my goals.
 
 # Rules 
 - Do not change ANY of the actual code
+- Never change the git history! Only add new commits to the history, never go back and change the history of old commits!
 - You are allowed to run the code and test it out. You can start up docker containers and run scripts. Just not allowed to make any changes to the code or scripts. But running things in a way that will not change it, to get a better understanding, and querying the system, is acceptable.
 - Feel free to create a new markdown file in any of the folders within the Documentation folder.
 - When you generate a markdown file, it should be in the format of (number of sequence in folder)-(Title). This way it is easy to organize the documents in time sequenced order. To keep the ordering, the (number of sequence in folder) should be three digits (eg, 001, 002, 003, ..., 035, etc). Then in the document, you should have the first line telling the time of creation in the format of Year_Month_Day_Hour_Min-(Title), where min hour day month year are all numbers so the organization is easy.
