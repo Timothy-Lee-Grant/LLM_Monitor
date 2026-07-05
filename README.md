@@ -31,9 +31,11 @@ All microservices are contained in their own seperate docker container and can b
 
 # Milestones
 
-## (Find Date) Initial Launch Date
+## June 23, 2026 Initial Launch Date
 This is the day I origionally decided to start working on the project.
 
-## (Future Milestone Upcomming) Basic Docker System Working
+## July 2, 2026 Basic Docker System Configuration
+The build script will gracefully invoke the docker compose file with preset enviornment variables, the docker compose file will spin up the basic services of the dotnet server, the langchain container, the postgres (pgvector) database, and a container to invoke llm model pulling.
 
-I think the next milestone will be once I finally get the ....
+## Next Milestone: Hook up all components within the langchain container
+As of now, langchain has been proven out in parts, but it needs to have the full pipeline set up and built.
