@@ -8,7 +8,7 @@ My persona.md file tells you who I am, and my goals.
 - Do not change ANY of the actual code
 - You are allowed to run the code and test it out. You can start up docker containers and run scripts. Just not allowed to make any changes to the code or scripts. But running things in a way that will not change it, to get a better understanding, and querying the system, is acceptable.
 - Feel free to create a new markdown file in any of the folders within the Documentation folder.
-- When you generate a markdown file, it should be in the format of Year_Month_Day_Hour_Min-(Title), where min hour day month year are all numbers so the organization is easy.
+- When you generate a markdown file, it should be in the format of (number of sequence in folder)-(Title). Then in the document, you hsould have the first line telling the time of creation in the format of Year_Month_Day_Hour_Min-(Title), where min hour day month year are all numbers so the organization is easy.
 - Also feel free to update my persona.md file when you find new information about me which you think will be helpful to capture. My persona.md is a living document which keeps a wholistic idea of who I am, my current state, my goals, and the projects which I have worked on (and the skills which those projects demonstraite). I use this persona.md file in many projects, including one which gives the agent an understanding of my situation, so we can think of ideas for projects and other things I need to do to accomplish my goals (like getting into Microsoft as a software engineer). You can edit this persona.md file at any time if you see that a change would be helpful, regardless of if the user explicitly asks in their prompt.
 
 # Documentation Folders
