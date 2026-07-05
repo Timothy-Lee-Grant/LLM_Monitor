@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 import app.prompts.MyPromptTemplates as pt
 from app.models.factory import ModelFactory
 from app.rag.Ingestion import FindSemanticlyClosestElement
