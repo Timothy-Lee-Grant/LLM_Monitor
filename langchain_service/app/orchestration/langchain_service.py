@@ -35,4 +35,4 @@ class langchain_orchestation:
     def langchain_orchestation(self):
         #get all models I will need load into memory
         # or would this just be a different system prompt, if so how would I organize that?
-        friendlyChatModel = ModelFactory.
+        friendlyChatModel = ModelFactory.   # forcing compilation error. 

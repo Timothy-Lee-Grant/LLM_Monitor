@@ -1,4 +1,5 @@
 from app.rag.Ingestion import FindSemanticlyClosestElement
+from app.graph.state import ChatState
 
 def retrieve_node(state: ChatState) -> dict:
     #Read what I need from the shared state

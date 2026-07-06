@@ -66,13 +66,8 @@ those pointers will go to an object which has mock responses?
 
 But now I am getting concerned about ensuring decoupling....
 '''
-MockChatTypePointers = [MockFriendlyAssistant, MockLlmJudge, MockPolicyViolationChecker]
+#MockChatTypePointers = [MockFriendlyAssistant, MockLlmJudge, MockPolicyViolationChecker]
 
-MockChatTypeDictionary = {
-    "friendly_assistent":MockFriendlyAssistant,
-    "llm_judge":MockLlmJudge,
-    "policy_violation_checker":MockPolicyViolationChecker
-    }
 
 MockFriendlyAssistant = [
     "You asked a wonderful question. The capital of Oregon is Salem",
@@ -103,3 +98,9 @@ MockPolicyViolationChecker = [
     # "",
     # ""
 ]
+
+MockChatTypeDictionary = {
+    "friendly_assistent":MockFriendlyAssistant,
+    "llm_judge":MockLlmJudge,
+    "policy_violation_checker":MockPolicyViolationChecker
+    }

@@ -4,7 +4,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
-from app.models.Instructions import TryGetOllamaModel
+from app.models.Instructions import TryGetOllamaChatModel
 from app.prompts.MyPromptTemplates import MockChatTypeDictionary, number_of_chat_types
 from langchain_ollama import OllamaEmbeddings
 
@@ -54,7 +54,7 @@ class ModelFactory:
             return MockChatModel
         
         base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-        res = TryGetOllamaModel(userDesiredModel, base_url)
+        res = TryGetOllamaChatModel(userDesiredModel, base_url)
 
         if not res:
             # There was an issue durring the instruction to get ollama service to pull the model

@@ -9,8 +9,8 @@
 
 import os
 from flask import request
-from langchain_postgres import ElephantVectorStore
-from langchain_core import Document
+from langchain_postgres import ElephantVectorStore # This fails, does not exist?
+from langchain_core.documents import Document 
 
 from app.models.factory import ModelFactory
 
