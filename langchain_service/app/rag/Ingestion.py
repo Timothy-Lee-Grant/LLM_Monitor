@@ -21,6 +21,7 @@ from app.models.factory import ModelFactory
 db_user = os.getenv("POSTGRES_USER","admin")
 db_pass = os.getenv("POSTGRES_PASSWORD","secret_pass")
 db_name = os.getenv("POSTGRES_DB","secret_pass")
+mode = os.getenv("LLM_MODE")
 
 connection_string = f"postgresql+psycopg://{db_user}:{db_pass}@pgvector_service:5432/{db_name}"
 
@@ -40,7 +41,13 @@ I will need to use the embedding model to take the documents and turn them into 
 then do an UPDATE (I think) to the pgvector db for my document which I found not to be in the database.
 '''
 def RunIdempotentRagIngestion():
-    #
+    # Block if we are in mock mode
+    
+    if mode == "mock":
+        # TODO: look into how this fake embedding might work
+        #langchain_core.embeddings.fake.FakeEmbeddings(size=768)
+        return True
+
     raw_docs = [
         Document(
             page_content="Employees are permitted to use local scripting tools for local automation, provided no proprietary source code leaves company assets.",
@@ -65,6 +72,12 @@ def CheckIfInjectionNeeded():
 #This function should have the document we want to search against in it, but as stated above in my comments,
 # I have not yet thought of a way to organize and map variables to the documents
 def FindSemanticlyClosestElement(incomingMessage:str, documentToSearchAgainst:str, k:int=2):
+
+    # I think now I need to encorporate if we are in 'mock' mode
+    if mode == "mock":
+        return 
+
+        
     # Two questions I have with this. I remember hearing that we need to block erronious retrevials, so I think we would need to set a minimum matching closeness.
     # Second question is that I am curious how we would do this outside of the LC ecosystem. I am imagining that there is a way to just talk with the pgvector itself and do the commands to get the data.
     results = vector_store.similarity_search(incomingMessage, k=k)

@@ -19,6 +19,10 @@ from langchain_ollama import OllamaEmbeddings
 class MockChatModel(BaseChatModel):
     _a = []
 
+    _modelType: str = "friendly_assistent"
+
+    def MockChatModel(self, modelType:str):
+        _modelType = modelType
     # Let me think about what I want for this method, then I hope it will be clear what I should do.
     '''
     This class is going to give the caller a object which is pretending to be a OllamaChat object.
@@ -31,7 +35,7 @@ class MockChatModel(BaseChatModel):
     parent object to wrap this custom thing based on the user's modelType. But now I am also realizing that I need a way to map the
     string modelType to the index in my MockChatTypePointers. So I might need to go change it to instead of a list of pointers to lists, to be dict of the pointers to the lists
     '''
-    def _generate(self, modelType):
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         mockResponsesList = MockChatTypeDictionary[modelType]
         '''
         I really don't know how to take this list and put it into a wrapper of the BaseChatModel.
@@ -39,12 +43,21 @@ class MockChatModel(BaseChatModel):
         '''
 
         # I looked at an example for the two lines below
-        generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.random(0,number_of_chat_types)]))
+        generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.randint(0,number_of_chat_types-1)]))
         return ChatResult(generations=[generation])
+    
+    # TODO: trying to get things to work, but I have no idea why I need to add this property
+    # it says "BaseChatModel has an abstract _llm_type property — without it, instantiation raises TypeError. Again, your _old class already does this right."
+    @property
+    def _llm_type(self) -> str:
+        return "mock-stub-provider"
 
 class ModelFactory:
 
     knownPulledModels = {}
+
+    def ModelFactory(self):
+        pass
 
     # The user's post request will have a option for the model which they want to talk with.
     @staticmethod
@@ -76,6 +89,9 @@ class ModelFactory:
 
     @staticmethod
     def get_embedding_model(userDesiredModel:str):
+        if os.getenv("LLM_MODE") == "mock":
+            return langchain_core.embeddings.fake.FakeEmbeddings(size=768)
+
         # nomic-embed-text
         # This is a new character (which is different from the other one we have known which is OllamaChatModel)
         embeddings = OllamaEmbeddings(
