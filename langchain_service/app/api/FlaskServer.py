@@ -64,8 +64,8 @@ def IntializeFlaskEndpoints():
             return jsonify({"status":"error", "message":str(e)}), 500
 
 
-    @app.route('/test', methods=['POST'])
-    def test_endpoint():
+    @app.route('/test_old', methods=['POST'])
+    def test_endpoint_old():
         data = request.get_json() or {}
         user_id = data.get("userId", "default_user")
         message = data.get("chatMessage")
@@ -81,5 +81,19 @@ def IntializeFlaskEndpoints():
             })
         except Exception as e:
             return jsonify({"status":"error", "message":str(e)}), 500
-    
-    return app
+
+    @app.route("/test/langchain/chat", methods=['POST'])
+    def test_langchain_chat_endpoint():
+        pass
+
+    @app.route("/test/langgraph/chat", methods=['POST'])
+    def test_langgraph_chat_endpoint():
+        pass
+
+    @app.route("/test/langchain/chatnosecurity", methods=['POST'])
+    def test_langchain_chatnosecurity_endpoint():
+        pass
+
+    @app.route("/test/langgraph/chatnosecurity", methods=['POST'])
+    def test_langgraph_chatnosecurity_endpoint():
+        pass
