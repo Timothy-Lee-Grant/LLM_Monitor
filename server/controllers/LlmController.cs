@@ -8,7 +8,7 @@ using System.Text;
 namespace LLM_MONITOR.server.controllers;
 
 
-[ApiController]
+[ApiController] 
 [Route("/api/[controller]")]
 public class LlmController: ControllerBase
 {
