@@ -41,6 +41,9 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - LLM_MODE=${LLM_MODE:-mock}
       - LLM_MODEL=${LLM_MODEL:-qwen2.5:1.5b}
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-vectordb}
     depends_on:
       pgvector-service:
         condition: service_healthy
@@ -50,13 +53,13 @@ services:
     container_name: pgvector_service
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-admin}
-      - POSTGRES_PASSWORD={POSTGRES_PASSWORD:-secret_pass}
-      - POSTGRES_DB={POSTGRES_DB:-secret_pass}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-vectordb}
     volumes: 
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d {POSTGRES_DB:-vectordb}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-vectordb}"]
       interval: 5s
       retries: 10
     
