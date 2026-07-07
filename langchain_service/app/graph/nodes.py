@@ -1,7 +1,9 @@
 from app.rag.Ingestion import FindSemanticlyClosestElement
 from app.graph.state import ChatState
 
-def retrieve_node(state: ChatState) -> dict:
+# Here we will define the nodes that flow from one to the other.
+
+def retrieve_node(state: ChatState) -> dict:  
     #Read what I need from the shared state
     user_query = state["user_msg"]
 

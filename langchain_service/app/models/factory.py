@@ -92,6 +92,9 @@ class ModelFactory:
         if os.getenv("LLM_MODE") == "mock":
             return langchain_core.embeddings.fake.FakeEmbeddings(size=768)
 
+        # Nothing asks to pull this embedding model like we do in the chat model. I need to follow the same architecture.
+        # TODO: above.
+        
         # nomic-embed-text
         # This is a new character (which is different from the other one we have known which is OllamaChatModel)
         embeddings = OllamaEmbeddings(
