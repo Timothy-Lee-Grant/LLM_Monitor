@@ -61,21 +61,17 @@ class ModelFactory:
 
     # The user's post request will have a option for the model which they want to talk with.
     @staticmethod
-    def get_chat_model(userDesiredModel: str) -> ChatOllama:
+    def get_chat_model(userDesiredModel: str) -> BaseChatModel:
 
         if os.getenv("LLM_MODE") == "mock":
-            return MockChatModel
+            return MockChatModel()
         
         base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
         res = TryGetOllamaChatModel(userDesiredModel, base_url)
 
         if not res:
             # There was an issue durring the instruction to get ollama service to pull the model
-            return None # Or maybe we return a mock?
-
-        # As of this point we know that we do have a model in ollama that matches the user's desired model
-
-        # I should now come in and get that connection wrapper with ollama using the langchain wrapper
+            return MockChatModel() 
 
         chatConnection = ChatOllama(
             model=userDesiredModel,
@@ -94,7 +90,7 @@ class ModelFactory:
 
         # Nothing asks to pull this embedding model like we do in the chat model. I need to follow the same architecture.
         # TODO: above.
-        
+
         # nomic-embed-text
         # This is a new character (which is different from the other one we have known which is OllamaChatModel)
         embeddings = OllamaEmbeddings(

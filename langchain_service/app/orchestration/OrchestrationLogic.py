@@ -20,7 +20,7 @@ def test_langchain_chatnosecurity_worker(user_id, user_requested_model, user_mes
 
 
 
-
+'''
 def ProcessNormalChatMessageRequest(user_id: str, user_msg: str, desiredModel:str):
     # This will do all of the high level operations
     policyViolationPrompt = pt.GetPolicyViolationCheckerPrompt()
@@ -65,3 +65,4 @@ def ProcessNormalChatMessageRequest(user_id: str, user_msg: str, desiredModel:st
     # then I should go and store it back into what ever database I should be using (would this be in the memory file?)
 
     return result
+'''
