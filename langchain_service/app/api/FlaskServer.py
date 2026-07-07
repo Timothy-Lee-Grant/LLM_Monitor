@@ -1,5 +1,6 @@
 from flask import Flask, jsonify
 from flask import request
+from app.orchestration.OrchestrationLogic import *
 
 
 def IntializeFlaskEndpoints():
@@ -9,7 +10,7 @@ def IntializeFlaskEndpoints():
     def Llm_Request():
         return jsonify({"status":"success", "data":"Hello!! You successfully reached my flask main API"})
 
-
+    """
     #TODO: Define the body which the POST request is expecting
     #Conceptual question: What is a good way to showcase the expected schema of the request? Right now I have either and example (like "eia84hbfsl") or I can do the data type I am expecting. What is the industry standard?
     '''
@@ -84,16 +85,34 @@ def IntializeFlaskEndpoints():
 
     @app.route("/test/langchain/chat", methods=['POST'])
     def test_langchain_chat_endpoint():
-        pass
+        return jsonify({"status": "success"})
 
     @app.route("/test/langgraph/chat", methods=['POST'])
     def test_langgraph_chat_endpoint():
-        pass
-
-    @app.route("/test/langchain/chatnosecurity", methods=['POST'])
-    def test_langchain_chatnosecurity_endpoint():
-        pass
+        return jsonify({"status": "success"})
 
     @app.route("/test/langgraph/chatnosecurity", methods=['POST'])
     def test_langgraph_chatnosecurity_endpoint():
-        pass
+        return jsonify({"status": "success"})
+    """
+
+    '''
+    {
+        "user_requested_model": str,
+        "user_id": int,
+        "user_message": str 
+    }
+    '''    
+    @app.route("/test/langchain/chatnosecurity", methods=['POST'])
+    def test_langchain_chatnosecurity_endpoint():
+        #parse the user's message
+        data = request.get_json()
+        user_requested_model = data.get("user_requested_model", "mock")
+        user_id = data.get("user_id", 1)
+        user_message = data.get("user_message", "hello!")
+
+        #pass user message into worker
+        llm_response = test_langchain_chatnosecurity_worker(user_id=user_id, user_requested_model=user_requested_model, user_message=user_message)
+
+        #return response
+        return jsonify({"status":"success", "message_response": llm_response})

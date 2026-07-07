@@ -5,7 +5,7 @@ services:
       dockerfile: dockerfile
     container_name: dotnet_server
     ports:
-      - "5000:80"
+      - "5000:8080"
     depends_on:
       - langchain_service
 
@@ -40,7 +40,7 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - LLM_MODE=${LLM_MODE:-mock}
-      - LLM_MODEL=${LLM_MODEL:-qwen2.5:1.5b}
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
       - POSTGRES_USER=${POSTGRES_USER:-admin}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret_pass}
       - POSTGRES_DB=${POSTGRES_DB:-vectordb}
