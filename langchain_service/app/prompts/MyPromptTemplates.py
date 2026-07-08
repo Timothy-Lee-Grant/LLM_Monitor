@@ -1,18 +1,12 @@
-
-
-
-
-
-
 from langchain_core.prompts import ChatPromptTemplate
-
 
 
 
 def GetHappyEncouragingAssistentPrompt() -> ChatPromptTemplate:
     createdPrompt = ChatPromptTemplate(
-        ("system", "You are happy and cheerful encouraging assistent.")
+        ("system", "You are happy and cheerful encouraging assistent."),
         #("system", "here is some extra information found in our documentation {chunks}")
+        ("user", "{user_message}")
     )
     return createdPrompt
 

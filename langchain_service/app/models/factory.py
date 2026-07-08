@@ -12,14 +12,10 @@ from langchain_ollama import OllamaEmbeddings
 class MockChatModel(BaseChatModel):
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        mockResponsesList = MockChatTypeDictionary[modelType]
-        '''
-        I really don't know how to take this list and put it into a wrapper of the BaseChatModel.
-        I think this indicates a gap in my knowledge of understanding. Possibly with object orientated programming concepts???
-        '''
 
         # I looked at an example for the two lines below
-        generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.randint(0,number_of_chat_types-1)]))
+        #generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.randint(0,number_of_chat_types-1)]))
+        generation = ChatGeneration(message=AIMessage(content="Fake response back"))
         return ChatResult(generations=[generation])
     
     @property
@@ -58,11 +54,13 @@ class ModelFactory:
         if os.getenv("LLM_MODE") == "mock":
             return 
 
-        res = TryGetOllamaEmbeddingModel("nomic-embed-text")
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama_service:11434")
+
+        res = TryGetOllamaEmbeddingModel("nomic-embed-text", base_url)
 
         embeddings = OllamaEmbeddings(
             model=userDesiredModel,
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+            base_url=base_url
         )
         return embeddings
 

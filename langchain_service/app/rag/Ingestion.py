@@ -1,12 +1,3 @@
-
-
-
-
-
-
-
-
-
 import os
 from flask import request
 from langchain_postgres import PGVector
@@ -25,23 +16,25 @@ mode = os.getenv("LLM_MODE")
 
 connection_string = f"postgresql+psycopg://{db_user}:{db_pass}@pgvector_service:5432/{db_name}"
 
+vector_store = None
+
 # I need to investigate what this is doing and how this is working.
-embeddings = ModelFactory.get_embedding_model("nomic-embed-text")
-collection_name = "company_policies"
-vector_store = ElephantVectorStore(
-    embedding=embeddings,
-    connection_string=connection_string,
-    collection_name=collection_name
-)
+def InitVectorStore():
+    global vector_store
+    if os.getenv("LLM_MODE") == "mock":
+        return
+    
+    embeddings = ModelFactory.get_embedding_model("nomic-embed-text")
+    collection_name = "company_policies"
+    vector_store = PGVector(
+        embedding=embeddings,
+        connection_string=connection_string,
+        collection_name=collection_name
+    )
 
-'''
-I will need to contact postgres database to see if the tables and documents exist already for the files in my project.
-If they already exist, then there is nothing to do. If they do not exist, I need to:
-I will need to use the embedding model to take the documents and turn them into vectors.
-then do an UPDATE (I think) to the pgvector db for my document which I found not to be in the database.
-'''
 def RunIdempotentRagIngestion():
-
+    InitVectorStore()
+    
     # Block if we are in mock mode
     if mode == "mock":
         return True
@@ -67,7 +60,7 @@ def RunIdempotentRagIngestion():
 # I have not yet thought of a way to organize and map variables to the documents
 def FindSemanticlyClosestElement(incomingMessage:str, documentToSearchAgainst:str, k:int=2):
 
-    # I think now I need to encorporate if we are in 'mock' mode
+    # Block in mock mode
     if mode == "mock":
         return 
 
