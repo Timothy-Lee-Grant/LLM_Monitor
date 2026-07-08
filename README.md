@@ -37,5 +37,7 @@ This is the day I origionally decided to start working on the project.
 ## July 2, 2026 Basic Docker System Configuration
 The build script will gracefully invoke the docker compose file with preset enviornment variables, the docker compose file will spin up the basic services of the dotnet server, the langchain container, the postgres (pgvector) database, and a container to invoke llm model pulling.
 
-## Next Milestone: Hook up all components within the langchain container
+## July 8, 2026: Hook up all components within the langchain container
 As of now, langchain has been proven out in parts, but it needs to have the full pipeline set up and built.
+
+## Next Milestone: Adding Frontend and Testing Metrics
