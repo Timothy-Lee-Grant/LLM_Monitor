@@ -10,6 +10,15 @@ def GetHappyEncouragingAssistentPrompt() -> ChatPromptTemplate:
     ])
     return createdPrompt
 
+# TODO: this should be not existing. I should find a way to just append the context into the GetHappyEncouragingAssistentPrompt
+def GetHappyEncouragingAssistentRagPrompt()-> ChatPromptTemplate:
+    createdPrompt = ChatPromptTemplate.from_messages([
+        ("system", "You are happy and cheerful encouraging assistent."),
+        ("user", "{user_message}"),
+        ("system", "Here is extra context: {context}")
+    ])
+    return createdPrompt
+
 def GetPolicyViolationCheckerPrompt() -> ChatPromptTemplate:
     # for injectedCompanyPolicy. I understand that we are not invoking that variable right now.
     # but it still feels strange to be 'using' a variable which I have not declared

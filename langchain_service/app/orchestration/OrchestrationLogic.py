@@ -14,7 +14,7 @@ This will provide project an interface to perform logic
 # Ideally this would be wrapped up in a class which dynamically selects the operations based on parameters, but we are just trying to get things to work.
 def test_langchain_chatnosecurity_worker(user_id, user_requested_model, user_message) -> str:
     # get a prompt
-    friendlyAssistentPrompt = GetHappyEncouragingAssistentPrompt()
+    friendlyAssistentPrompt = GetHappyEncouragingAssistentRagPrompt()
 
     # get a model
     model = ModelFactory.get_chat_model(user_requested_model)
@@ -27,6 +27,23 @@ def test_langchain_chatnosecurity_worker(user_id, user_requested_model, user_mes
 
     return model_response
 
+def test_langchain_chatnosecurityrag_worker(user_id, user_requested_model, user_message) -> str:
+    # get a prompt
+    friendlyAssistentPrompt = GetHappyEncouragingAssistentPrompt()
+
+    # get top k nearest elements
+    list_of_close_documents = FindSemanticlyClosestElement(user_message,k=2)
+
+    added_context = "\n\n".join([doc.page_content for doc in list_of_close_documents])
+
+    # get a model
+    model = ModelFactory.get_chat_model(user_requested_model)
+
+    chain = friendlyAssistentPrompt | model | StrOutputParser()
+
+    model_response = chain.invoke({"user_message":user_message, "context": added_context})
+
+    return model_response
 
 
 '''

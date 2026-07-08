@@ -117,4 +117,18 @@ def IntializeFlaskEndpoints():
         #return response
         return jsonify({"status":"success", "message_response": llm_response})
     
+    @app.route("/test/langchain/chatnosecurityrag", methods=['POST'])
+    def test_langchain_chatnosecurity_rag_endpoint():
+        #parse the user's message
+        data = request.get_json()
+        user_requested_model = data.get("user_requested_model", "mock")
+        user_id = data.get("user_id", 1)
+        user_message = data.get("user_message", "hello!")
+
+        #pass user message into worker
+        llm_response = test_langchain_chatnosecurityrag_worker(user_id=user_id, user_requested_model=user_requested_model, user_message=user_message)
+
+        #return response
+        return jsonify({"status":"success", "message_response": llm_response})
+    
     return app 
