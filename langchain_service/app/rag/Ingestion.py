@@ -58,11 +58,11 @@ def RunIdempotentRagIngestion():
 
 #This function should have the document we want to search against in it, but as stated above in my comments,
 # I have not yet thought of a way to organize and map variables to the documents
-def FindSemanticlyClosestElement(incomingMessage:str, documentToSearchAgainst:str, k:int=2):
+def FindSemanticlyClosestElement(incomingMessage:str, documentToSearchAgainst:str="", k:int=2):
 
     # Block in mock mode
     if mode == "mock":
-        return 
+        return []
 
 
     # Two questions I have with this. I remember hearing that we need to block erronious retrevials, so I think we would need to set a minimum matching closeness.

@@ -29,7 +29,7 @@ def test_langchain_chatnosecurity_worker(user_id, user_requested_model, user_mes
 
 def test_langchain_chatnosecurityrag_worker(user_id, user_requested_model, user_message) -> str:
     # get a prompt
-    friendlyAssistentPrompt = GetHappyEncouragingAssistentPrompt()
+    friendlyAssistentPrompt = GetHappyEncouragingAssistentRagPrompt()
 
     # get top k nearest elements
     list_of_close_documents = FindSemanticlyClosestElement(user_message,k=2)
