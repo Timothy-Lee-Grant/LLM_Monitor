@@ -267,6 +267,18 @@ I want to develop strong engineering intuition so that I can reason about unfami
 
 ---
 
+# Active Projects
+
+## LLM_Monitor (2026, in progress)
+
+A self-built AI orchestration platform (100% hand-written code; AI used only for review/mentorship docs). Microservices: C#/.NET gateway, Python/Flask + LangChain service, pgvector, Ollama — all Docker-composed with mock/live modes.
+
+**Skills demonstrated so far:** Docker Compose profiles/healthchecks, REST APIs in ASP.NET Core and Flask, factory pattern for mock/live LLM models, pgvector RAG ingestion and semantic search, prompt templating.
+
+**Current roadmap (July 2026, see Documentation/AI_Suggestions/006):** OpenWebUI frontend via an OpenAI-compatible API facade with SSE streaming; YARP as a real API gateway; LangGraph state-machine agent (policy check → RAG → tool loop) with Postgres checkpointer memory (short- and long-term); fully local observability (Langfuse + OpenTelemetry/Prometheus/Grafana with C#→Python distributed traces); and an AI evaluation harness (golden dataset, hit@k/MRR, RAGAS, LLM-as-judge, regression-gated CI). Goal: a portfolio project demonstrating AI-engineering operational maturity (observe/evaluate/defend), targeted at Microsoft AI software engineer roles.
+
+---
+
 # Expectations for AI Assistance
 
 When assisting me:
