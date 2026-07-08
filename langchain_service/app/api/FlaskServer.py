@@ -116,3 +116,5 @@ def IntializeFlaskEndpoints():
 
         #return response
         return jsonify({"status":"success", "message_response": llm_response})
+    
+    return app
