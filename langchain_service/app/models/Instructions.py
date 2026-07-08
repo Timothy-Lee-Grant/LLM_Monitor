@@ -71,9 +71,9 @@ def TryGetOllamaEmbeddingModel(desired_model:str, base_ollama_url:str) -> bool:
         #send pull api request to ollama service
         payload = {
             "model": desired_model,
-            "streaming": False
+            "stream": False
         }
-        response = requests.post(f"{base_ollama_url}/api/pull", json=payload)
+        response = requests.post(f"{base_ollama_url}/api/pull", json=payload, timeout=None)
         if response.json().get("status", "bad") != "success":
             return False
         knownPulledOllamaEmbeddingModels.add(desired_model)

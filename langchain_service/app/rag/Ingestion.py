@@ -11,7 +11,7 @@ from app.models.factory import ModelFactory
 
 db_user = os.getenv("POSTGRES_USER","admin")
 db_pass = os.getenv("POSTGRES_PASSWORD","secret_pass")
-db_name = os.getenv("POSTGRES_DB","secret_pass")
+db_name = os.getenv("POSTGRES_DB","vectordb")
 mode = os.getenv("LLM_MODE")
 
 connection_string = f"postgresql+psycopg://{db_user}:{db_pass}@pgvector_service:5432/{db_name}"
@@ -27,8 +27,8 @@ def InitVectorStore():
     embeddings = ModelFactory.get_embedding_model("nomic-embed-text")
     collection_name = "company_policies"
     vector_store = PGVector(
-        embedding=embeddings,
-        connection_string=connection_string,
+        embeddings=embeddings,
+        connection=connection_string,
         collection_name=collection_name
     )
 

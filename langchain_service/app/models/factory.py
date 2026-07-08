@@ -42,6 +42,7 @@ class ModelFactory:
 
         chatConnection = ChatOllama(
             model=userDesiredModel,
+            base_url=base_url,
             temperature=0
         )
 
