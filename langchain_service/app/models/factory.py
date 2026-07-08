@@ -4,43 +4,23 @@ from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
-from app.models.Instructions import TryGetOllamaModel
+from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
 from app.prompts.MyPromptTemplates import MockChatTypeDictionary, number_of_chat_types
 from langchain_ollama import OllamaEmbeddings
 
 
-# This should act just as a real llm but give back messages which are probabalistic out of a list of predefined message responses.
-# We will need to respect the shape which the response will need to be (so it will need to conform to the same shape which our normal ChatModel is. I think BaseChatModel will help with this.....)
-
-# TODO: I am concerned because I know that my project will have different models doing different things. 
-# For example, I will have a llm judge, a friendly assistant, a tool selector, a policy violation checker, etc
-# Therefore my responses can not be probabalistic wholly through return a single index of a list. (maybe I can have many different litst based on each of those llm types??)
-# OR should that be part of the system or some other compoent in my project???
 class MockChatModel(BaseChatModel):
-    _a = []
 
-    # Let me think about what I want for this method, then I hope it will be clear what I should do.
-    '''
-    This class is going to give the caller a object which is pretending to be a OllamaChat object.
-    First meta observation: I should think about things in terms of contracts. When I don't know what I should do. I should think about the question 'what is the contract of this method or class?'
-    This means that I will need to know what type of model the user is trying to get. This requires me to have a modelType parameter passed in.
-    Now I am thinking about where modelType should come from. To me it makes sense that it would be in the file that has the standard prompts because this is where the different types of chat types will be enumerated.
-    Ok, I now went to my file called MyPromptTemplates and added a list of pointers to a list of string responses.
-    
-    I think the BaseChatModel is the type which is the 'shape' I keep talking about. So I need to find out how I can use that 
-    parent object to wrap this custom thing based on the user's modelType. But now I am also realizing that I need a way to map the
-    string modelType to the index in my MockChatTypePointers. So I might need to go change it to instead of a list of pointers to lists, to be dict of the pointers to the lists
-    '''
-    def _generate(self, modelType):
-        mockResponsesList = MockChatTypeDictionary[modelType]
-        '''
-        I really don't know how to take this list and put it into a wrapper of the BaseChatModel.
-        I think this indicates a gap in my knowledge of understanding. Possibly with object orientated programming concepts???
-        '''
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
 
         # I looked at an example for the two lines below
-        generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.random(0,number_of_chat_types)]))
+        #generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.randint(0,number_of_chat_types-1)]))
+        generation = ChatGeneration(message=AIMessage(content="Fake response back"))
         return ChatResult(generations=[generation])
+    
+    @property
+    def _llm_type(self) -> str:
+        return "mock-stub-provider"
 
 class ModelFactory:
 
@@ -48,115 +28,41 @@ class ModelFactory:
 
     # The user's post request will have a option for the model which they want to talk with.
     @staticmethod
-    def get_chat_model(userDesiredModel: str) -> ChatOllama:
+    def get_chat_model(userDesiredModel: str) -> BaseChatModel:
 
         if os.getenv("LLM_MODE") == "mock":
-            return MockChatModel
+            return MockChatModel()
         
         base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-        res = TryGetOllamaModel(userDesiredModel, base_url)
+        res = TryGetOllamaChatModel(userDesiredModel, base_url)
 
         if not res:
             # There was an issue durring the instruction to get ollama service to pull the model
-            return None # Or maybe we return a mock?
-
-        # As of this point we know that we do have a model in ollama that matches the user's desired model
-
-        # I should now come in and get that connection wrapper with ollama using the langchain wrapper
+            return MockChatModel() 
 
         chatConnection = ChatOllama(
             model=userDesiredModel,
+            base_url=base_url,
             temperature=0
         )
 
         return chatConnection
 
 
-
-
     @staticmethod
     def get_embedding_model(userDesiredModel:str):
-        # nomic-embed-text
-        # This is a new character (which is different from the other one we have known which is OllamaChatModel)
+        # TODO: Does not make sense to be in mock mode and call this.
+        if os.getenv("LLM_MODE") == "mock":
+            return 
+
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama_service:11434")
+
+        res = TryGetOllamaEmbeddingModel("nomic-embed-text", base_url)
+
         embeddings = OllamaEmbeddings(
             model=userDesiredModel,
-            base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+            base_url=base_url
         )
         return embeddings
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class MockChatModel_old(BaseChatModel):
-    ''' A minimial, local mock llm wrapper for isolated pipeline validation.'''
-
-    # I am still shaky on undersanding the idea of **kwargs I know they are used so much in EVERY languae, but I dont know much about how argument variables. What are they, where are they passed in from, how do we manipulate them, etc.
-    # I think this idea scared me when I was first learning programming (in C) because it was something with a dynamic something (I think it had a ... inside of a function which took an indefinate number of items into it), like the printf(...)
-    # so when I first saw it I didn't understand it and was so confused. but now I am strong in the concepts so I should revisit it.
-    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        # always return a clean mock response structure instantly without calling out to the network (docker)
-        mock_text = "[MOCK RESPONSE] Policy analysis evaluation bypassed. Environment configuration set to mock."
-        generation = ChatGeneration(messages=AIMessage(content=mock_text))
-
-        return ChatResult(generation=[generation])
-    
-    @property
-    def _llm_type(self) -> str:
-        return "mock-stub-provider"
-
-class ModelFactory_old:
-    @staticmethod
-    def get_model() -> BaseChatModel:
-        ''' determines model intialization strategy based on host environment variables '''
-        env = os.getenv("LLM_MODE", "mock").lower()
-        
-        if env == "live":
-            model_name = os.getenv("LLM_MODEL", "llama3.3:8b")
-            print("[Factory] Constructing live interface link to actual llm model", flush=True)
-
-            return ChatOllama(
-                model=model_name,
-                temperature=0.0,
-                base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-            )
-        print("[Factory] Instantiating low resource mock validation layer", flush=True)
-        return MockChatModel()
-    
-
-# This demonstrates a Multiton / Registry Pattern
-# But I will not use it because creating a ChatOllama object is not heavy.
-'''
-class ModelFactory2:
-    _instances = {}
-
-    @classmethod
-    def get_models(cls, codel_name: str) -> BaseChatModel:
-        # if we aready created a client for this model, reuse it.
-        if model_name not in cls._instances:
-            cls._instances[model_name] = ChatOllama(model=model_name, temperature=0)
-        return cls._instances[model_name]
-'''

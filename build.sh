@@ -15,7 +15,7 @@ PROJECT="llm_monitor"
 export LLM_MODE="$MODE" LLM_MODEL="$MODEL"
 
 echo "Taking down previous contianers and removing orphans"
-docker compose -p "$PROJECT" down --remove-orphans
+docker compose -p "$PROJECT" --profile "*" down --remove-orphans
 
 
 echo "Building images from current source"
@@ -28,9 +28,9 @@ if [[ "$MODE" == "live" ]]; then
     # NOTE: We are now enabling secondary composition override
     # $GPU is called a dynamic string injector
     # TODO: investigate layed docker compose setups, dynamic string injectors, and composition overrides.
-    docker compose -p "$PROJECT" --profile live -f docker-compose.yaml $GPU build 
+    docker compose -p "$PROJECT" --profile live -f docker-compose.yaml ${GPU:-} build 
     echo "Instanciating live containers (Ollama active)"
-    docker compose -p "$PROJECT" --profile live -f docker-compose.yaml $GPU up --force-recreate -d
+    docker compose -p "$PROJECT" --profile live -f docker-compose.yaml ${GPU:-} up --force-recreate -d
 else
     docker compose -p "$PROJECT" -f docker-compose.yaml build
     echo "Instantiating mock containers (Lightweight Mode)"
