@@ -78,3 +78,4 @@ def TryGetOllamaEmbeddingModel(desired_model:str, base_ollama_url:str) -> bool:
             return False
         knownPulledOllamaEmbeddingModels.add(desired_model)
         return True
+    return True

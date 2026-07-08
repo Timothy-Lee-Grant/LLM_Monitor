@@ -1,6 +1,7 @@
 import app.prompts.MyPromptTemplates as pt
 from app.models.factory import ModelFactory
 from app.rag.Ingestion import FindSemanticlyClosestElement
+from app.prompts.MyPromptTemplates import *
 
 from langchain_core.output_parsers import StrOutputParser
 '''
@@ -11,12 +12,16 @@ This will provide project an interface to perform logic
 # Ideally this would be wrapped up in a class which dynamically selects the operations based on parameters, but we are just trying to get things to work.
 def test_langchain_chatnosecurity_worker(user_id, user_requested_model, user_message) -> str:
     # get a prompt
-    # factory should return to me a 'model obj' (either real or mocked)
-    model = 
+    friendlyAssistentPrompt = GetHappyEncouragingAssistentPrompt()
 
     # get a model
+    model = ModelFactory.get_chat_model(user_requested_model)
+
+    chain = friendlyAssistentPrompt | model | StrOutputParser()
 
     # invoke model and return it
+    # TODO: as of now, friendlyAssistentPrompt does not take in any placeholder values for the user's message
+    model_response = chain.invoke({})
 
 
 

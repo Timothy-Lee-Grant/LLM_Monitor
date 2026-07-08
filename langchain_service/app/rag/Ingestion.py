@@ -41,12 +41,12 @@ I will need to use the embedding model to take the documents and turn them into 
 then do an UPDATE (I think) to the pgvector db for my document which I found not to be in the database.
 '''
 def RunIdempotentRagIngestion():
+
     # Block if we are in mock mode
-    
     if mode == "mock":
-        # TODO: look into how this fake embedding might work
-        #langchain_core.embeddings.fake.FakeEmbeddings(size=768)
         return True
+    
+    # TODO: need to take in actual docs. Loader -> chunker -> 
 
     raw_docs = [
         Document(
@@ -62,12 +62,6 @@ def RunIdempotentRagIngestion():
     vector_store.add_documents(raw_docs)
     return True
 
-# I have not thought about how I will determine which documents I need to put into my vector database.
-# These could be passed in as environement variables, or hardcoded, or part of a script.
-# For now I will use the hardcoded method
-# TODO: Change to not hardcoded.
-def CheckIfInjectionNeeded():
-    pass
 
 #This function should have the document we want to search against in it, but as stated above in my comments,
 # I have not yet thought of a way to organize and map variables to the documents
@@ -77,7 +71,7 @@ def FindSemanticlyClosestElement(incomingMessage:str, documentToSearchAgainst:st
     if mode == "mock":
         return 
 
-        
+
     # Two questions I have with this. I remember hearing that we need to block erronious retrevials, so I think we would need to set a minimum matching closeness.
     # Second question is that I am curious how we would do this outside of the LC ecosystem. I am imagining that there is a way to just talk with the pgvector itself and do the commands to get the data.
     results = vector_store.similarity_search(incomingMessage, k=k)
