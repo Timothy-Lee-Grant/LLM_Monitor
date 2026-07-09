@@ -48,6 +48,23 @@ services:
       pgvector-service:
         condition: service_healthy
 
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    ports:
+      - "3000:8080"
+    environment:
+      #- OPENAI_API_BASE_URL=http://dotnet_server:8080/v1
+      - OPENAI_API_BASE_URL=http://langchain_service:8080/v1
+      - OPENAI_API_KEY=dummy-key-not-checked
+      - ENABLE_OLLAMA_API=false
+      - WEBUI_AUTH=false
+    volumes:
+      - openwebui_data:/app/backend/data
+    depends_on:
+      #- dotnet_server
+      - langchain_service
+
   pgvector-service:
     image: pgvector/pgvector:pg16
     container_name: pgvector_service
