@@ -131,4 +131,23 @@ def IntializeFlaskEndpoints():
         #return response
         return jsonify({"status":"success", "message_response": llm_response})
     
+    # Eventually openwebui will only talk to our dotnet server. But for now will do testing like this
+    @app.route("/v1/models", method=["GET"])
+    def list_models():
+        return jsonify({
+            "object": "list",
+            "data": [
+                {"id": "llm-monitor-agent", "object": "model", "owned_by": "timothy"},
+                {"id": "llm-monitor-agent-mock", "object": "model", "owned_by": "timothy"}
+            ]
+        })
+    
+    @app.route("/v1/chat/completions", method=["POST"])
+    def t1():
+        package = request.get_json()
+        agent_path = package["model"]
+        llm_response = agents_paths_available[agent_path]() # I think I would implement this by having agents_paths_available as a dict where key is the string, and val us the orchistration method
+        return jsonify({"status":"success", "llm_response":llm_response})
+
+
     return app 
