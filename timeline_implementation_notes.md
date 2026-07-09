@@ -137,3 +137,13 @@ Need to learn about logging, telemetry collection (user tokens, violations, syst
 ## Needed Addition!
 
 I just realized that I should abstract out the orchestration logic. I will add a new compoent to my project called 'orchestration_logic'.
+
+# July 9, 2026:
+
+## Docker and langchain working
+
+## Still Need to Review
+
+Today I wrote some components for adding Openwebui docker component, creating Flask endpoints which conform to openwebui's API interface, added a Node for langgraph.
+
+Each of these things were not fully understood and I need to go back and actually review them fully.

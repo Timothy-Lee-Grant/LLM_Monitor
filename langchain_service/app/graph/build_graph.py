@@ -1,10 +1,16 @@
-
-
-# TODO: These two are practice.
-
 from langgraph.graph import StateGraph, START, END
+from app.graph.state import ChatState
+from app.graph.nodes import policy_check_node
+from langgraph.prebuilt import ToolNode, tool_condition
 
-def build_graph(chekcpointer=None):
+
+def build_graph(checkpointer=None):
+    g = StateGraph(ChatState)
+    
+
+
+# These two are practice.
+def build_graph_old(chekcpointer=None):
     g = StateGraph(ChatState)
     g.add_node("policy_check", policy_check_node)
     g.add_node("retrieve", retrieve_node)
