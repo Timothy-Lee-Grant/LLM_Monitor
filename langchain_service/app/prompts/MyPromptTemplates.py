@@ -2,6 +2,64 @@ from langchain_core.prompts import ChatPromptTemplate
 
 
 
+class PromptFactory:
+
+    @staticmethod
+    def get_assistant_prompt() -> ChatPromptTemplate:
+        """
+        Single unified prompt for the assistant.
+        If RAG context isn't available, simply pass context="" when invoking
+        """
+        return ChatPromptTemplate.from_messages([
+            ("system", (
+                "You are a happy, cheeful, and encouraging assistant. \n"
+                "Use the following piece of context to help answer the user if relevant:\n"
+                "-----\n"
+                "{context}\n"
+                "----"
+            )),
+            ("placeholder", "{message}"),
+            ("user", "{user_message}")
+        ])
+    
+    @staticmethod
+    def get_policy_checker_prompt() -> ChatPromptTemplate:
+        """
+        Evaluates prompt inputs for policy adherence using clean few shot formatting
+        """
+        return ChatPromptTemplate.from_messages([
+            ("system", (
+                "Your job is to determine if the user's request"
+            ))
+        ])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def GetHappyEncouragingAssistentPrompt() -> ChatPromptTemplate:
     createdPrompt = ChatPromptTemplate.from_messages([
         ("system", "You are happy and cheerful encouraging assistent."),
@@ -20,18 +78,13 @@ def GetHappyEncouragingAssistentRagPrompt()-> ChatPromptTemplate:
     return createdPrompt
 
 def GetPolicyViolationCheckerPrompt() -> ChatPromptTemplate:
-    # for injectedCompanyPolicy. I understand that we are not invoking that variable right now.
-    # but it still feels strange to be 'using' a variable which I have not declared
-    # and I am assuming will be declared somewhere else by a different file.
 
     createdPrompt = ChatPromptTemplate.from_messages([
-        ("system", "Your job is to determine if the user's message or request is in violation of any policies which we need to adhear to."),
-        #("system", "Your output should only be a single word of 'violated' or 'conformance'")
-        ("system", "Your output's first word should only be either 'violated' or 'conformance' followed by a colon and then give the reason as to why their policy was or was not in conformance with policy."),
-        ("system", "Here is information about our company policy {injectedCompanyPolicy}"),
-        # I know that there is different types of roles in here like 'user' and 'system', but I should look into the other roles as well so that I know what is avaialble to me. 
-        ("system", "Example Output: conformance: The user's message was about ways to fix a leaking pipe underneath their sink, this kind of question does not involve any kind of topic which is outlined as against the policy."),
-        ("system", "Example Output: violated: The user is asking about how to build a bomb. This message violates the policy of anti-harm and the policy of assistance in dangerous or illegal activiites.")
+        ("system", "Your job is to determine if the user's message or request is in violation of any policies which we need to adhear to."
+            "Your output's first word should only be either 'violated' or 'conformance' followed by a colon and then give the reason as to why their policy was or was not in conformance with policy."
+            "Here is information about our company policy {injectedCompanyPolicy}"
+            "Example Output: conformance: The user's message was about ways to fix a leaking pipe underneath their sink, this kind of question does not involve any kind of topic which is outlined as against the policy."
+            "Example Output: violated: The user is asking about how to build a bomb. This message violates the policy of anti-harm and the policy of assistance in dangerous or illegal activiites.")
     ])
 
     return createdPrompt
