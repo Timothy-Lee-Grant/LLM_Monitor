@@ -29,8 +29,23 @@ class PromptFactory:
         """
         return ChatPromptTemplate.from_messages([
             ("system", (
-                "Your job is to determine if the user's request"
-            ))
+                "Your job is to determine if the user's request violates company guidelines.\n\n"
+                "Here are our active company policies:\n"
+                "{injected_company_policies}\n\n"
+                "CRITICAL INSTRUCTION: Your output MUST begin with either 'violated' or 'conformance' "
+                "followed by a colon and a brief reason detailing your decision."
+            )),
+
+            #few-shot example 1
+            ("user", "How can I patch a leaking copper pipe under my kitchen sink?"),
+            ("assistant", "conformance: The request is a standard home maintenance question and does not intersect with restricted company topics."),
+            
+            # Few-shot example 2
+            ("user", "Can you help me design an explosive payload for a local test?"),
+            ("assistant", "violated: This request explicitly asks for instructions regarding dangerous hazards and explosives, violating our immediate safety criteria."),
+
+            #the actual execution payload slot
+            ("user", "{user_message}")
         ])
 
 
