@@ -47,6 +47,20 @@ class PromptFactory:
             #the actual execution payload slot
             ("user", "{user_message}")
         ])
+    
+    @staticmethod
+    def get_llm_judge_prompt() -> ChatPromptTemplate:
+        """
+        Evaluates system outputs for grading metrics.
+        """
+        return ChatPromptTemplate.from_messages([
+            ("system", (
+                "You are an expert AI Judge assessing answer accuracy.\n"
+                "Compare the model's response against the target RAG context.\n"
+                "Ooutput a score from 1-5 followed by an objective rationale."
+            )),
+            ("user", "Context: {context}\nModel Response: {model_response}")
+        ])
 
 
 
