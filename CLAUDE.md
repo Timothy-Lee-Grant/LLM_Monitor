@@ -35,3 +35,7 @@ The markdown files you put in this folder will be to help me get my system worki
 In the markdown file, give step by step instructions to the developer on how to implement the solutions.
 
 This document allows me to get help with my system and get it working, but still allows me to learn every single thing which needs to be done because it is not done for me. I still need to explicitly implement all of the steps which you tell to me.
+
+## Project_Captures
+
+This folder will contain one single file which are used to capture the state of the project at the time requested. This document should only be appended onto by logging a new state. Don't append to this document unless the user specificlly asks for it. When the user ask to add documents to all folders in documentation, they do not mean this one unless specificlly said to do this targeted file. This document should be mainly for concuption of other llm models. The point of this file is to be able to capture and articulate the state of the project, design difficulties I am having, find stories which might be useful to me in interviews. highlight things which I should high light. I will copy and paste this file into my other projects to help me track projects which I am doing and help me prepare for interviews. I am targeting Microsoft as a software engineer.
