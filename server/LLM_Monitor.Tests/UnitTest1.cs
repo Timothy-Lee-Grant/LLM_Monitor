@@ -1,10 +1,11 @@
-﻿namespace LLM_Monitor.Tests;
+﻿using Xunit;
+namespace LLM_Monitor.Tests;
 
-public class UnitTest1
+public class PlaceholderTests
 {
     [Fact]
-    public void Test1()
+    public void TestAlwaysPasses()
     {
-
+        Assert.True(true);
     }
 }
