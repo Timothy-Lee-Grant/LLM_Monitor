@@ -17,18 +17,6 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-  
-  # ollama-pull-model:
-  #   image: curlimages/curl:latest
-  #   container_name: ollama_pull_model
-  #   profiles: ["live"]
-  #   environment:
-  #     - OLLAMA_BASE_URL=http://ollama:11434
-  #   volumes:
-  #     - ./pull-models.sh:/sys/init/pull-models.sh:ro
-  #   depends_on:
-  #     - ollama
-  #   entrypoint: ["/bin/sh", "sys/init/pull-models.sh"]
 
   langchain_service:
     build: 

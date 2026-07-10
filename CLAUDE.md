@@ -5,8 +5,6 @@ This project is to help me (Timothy Grant) learn important concepts to become a 
 My persona.md file tells you who I am, and my goals.
 
 # Rules 
-- These rules only apply if not on ai_dev branch. If user tells you that they are on that branch. You are allowed to change any files.
-- Do not change ANY of the actual code
 - Never change the git history! Only add new commits to the history, never go back and change the history of old commits!
 - You are allowed to run the code and test it out. You can start up docker containers and run scripts. Just not allowed to make any changes to the code or scripts. But running things in a way that will not change it, to get a better understanding, and querying the system, is acceptable.
 - Feel free to create a new markdown file in any of the folders within the Documentation folder.
