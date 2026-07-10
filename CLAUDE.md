@@ -5,6 +5,7 @@ This project is to help me (Timothy Grant) learn important concepts to become a 
 My persona.md file tells you who I am, and my goals.
 
 # Rules 
+- These rules only apply if not on ai_dev branch. If user tells you that they are on that branch. You are allowed to change any files.
 - Do not change ANY of the actual code
 - Never change the git history! Only add new commits to the history, never go back and change the history of old commits!
 - You are allowed to run the code and test it out. You can start up docker containers and run scripts. Just not allowed to make any changes to the code or scripts. But running things in a way that will not change it, to get a better understanding, and querying the system, is acceptable.
@@ -39,3 +40,7 @@ This document allows me to get help with my system and get it working, but still
 ## Project_Captures
 
 This folder will contain one single file which are used to capture the state of the project at the time requested. This document should only be appended onto by logging a new state. Don't append to this document unless the user specificlly asks for it. When the user ask to add documents to all folders in documentation, they do not mean this one unless specificlly said to do this targeted file. This document should be mainly for concuption of other llm models. The point of this file is to be able to capture and articulate the state of the project, design difficulties I am having, find stories which might be useful to me in interviews. highlight things which I should high light. I will copy and paste this file into my other projects to help me track projects which I am doing and help me prepare for interviews. I am targeting Microsoft as a software engineer.
+
+## AI_Implementation_Plans
+
+Documents in this folder will be for implementation plans which the AI will create for themselves to be able to reviewed by Timothy, and then with permission from Timothy followed though step by step. 
