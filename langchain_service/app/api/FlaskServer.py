@@ -133,7 +133,7 @@ def IntializeFlaskEndpoints():
         return jsonify({"status":"success", "message_response": llm_response})
     
     # Eventually openwebui will only talk to our dotnet server. But for now will do testing like this
-    @app.route("/v1/models", method=["GET"])
+    @app.route("/v1/models", methods=["GET"])
     def list_models():
         return jsonify({
             "object": "list",
@@ -153,7 +153,7 @@ def IntializeFlaskEndpoints():
     '''
 
 
-    @app.route("/v1/chat/completions", method=["POST"])
+    @app.route("/v1/chat/completions", methods=["POST"])
     def chat_completions():
         data = request.get_json()
         user_message = data["messages"][-1]["content"]
