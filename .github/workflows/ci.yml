@@ -1,0 +1,47 @@
+name: CI Testing Pipeline
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v4
+
+      - name: Set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+        
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run Pytest 
+        run: pytest
+
+  csharp-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up .NET Core SDK
+        uses: actions/setup-detnet@v4
+        with:
+          dotnet-version: '11.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Run xUnit Tests
+        run: dotnet test --configuration Release -l trx
+      

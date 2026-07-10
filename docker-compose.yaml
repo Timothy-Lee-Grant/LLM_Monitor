@@ -84,3 +84,4 @@ services:
 volumes:
   ollama_data:
   pgdata:
+  openwebui_data:
