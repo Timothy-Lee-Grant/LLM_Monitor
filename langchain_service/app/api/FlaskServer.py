@@ -70,21 +70,7 @@ def IntializeFlaskEndpoints():
     def chat_completions():
         data = request.get_json()
         user_message = data["messages"][-1]["content"]
-        '''
-        answer = run_agent(user_message, thread_id=_thread_id_from(data))
-        return jsonify({
-            "id": f"chatcmpl-{uuid.uuid4()}",
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": data.get("model", "llm-monitor-agent"),
-            "choices": [{
-                "index": 0,
-                "message": {"role": "assistant", "content": answer},
-                "finish_reason": "stop"
-            }],
-            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        })
-        '''
+
         return jsonify({
             "id": f"chatcmpl-{uuid.uuid4()}",
             "object": "chat.completion",
