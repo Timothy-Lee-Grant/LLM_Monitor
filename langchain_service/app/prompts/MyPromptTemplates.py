@@ -24,11 +24,6 @@ def GetPolicyViolationCheckerPrompt() -> ChatPromptTemplate:
     # but it still feels strange to be 'using' a variable which I have not declared
     # and I am assuming will be declared somewhere else by a different file.
 
-    # TODO: make sure that my rag system actually injects this 'injectedCompanyPolicy'
-    # should I do some logic in this function to raise an exeption if it is not present?
-    
-    # I don't think I should be injecting a RAG here, the reason is because I should, in this file, ONLY be giving standardized prompts that other components in my project can use.
-    # It seems to me that this means that the responsibility of injecting data into the prompt for rag of the company policies will be in a different compoent of my project.
     createdPrompt = ChatPromptTemplate.from_messages([
         ("system", "Your job is to determine if the user's message or request is in violation of any policies which we need to adhear to."),
         #("system", "Your output should only be a single word of 'violated' or 'conformance'")
@@ -38,10 +33,6 @@ def GetPolicyViolationCheckerPrompt() -> ChatPromptTemplate:
         ("system", "Example Output: conformance: The user's message was about ways to fix a leaking pipe underneath their sink, this kind of question does not involve any kind of topic which is outlined as against the policy."),
         ("system", "Example Output: violated: The user is asking about how to build a bomb. This message violates the policy of anti-harm and the policy of assistance in dangerous or illegal activiites.")
     ])
-
-    # I know that there is something called asssistant, but I don't know the proper way to use it.
-
-    # TODO: practice using assistant and tool in system prompt.
 
     return createdPrompt
 
@@ -58,27 +49,12 @@ def GetLlmJudgePrompt() -> ChatPromptTemplate:
 
 
 
-# I want to create a variable which will allow me to have all of the different types of valid
-# ChatTypes. In C I would do a typedef struct. but what should I do in python?
 number_of_chat_types = 3
 ChatTypeList = ["Friendly Assistant", "LLM Judge", "Policy Violation Checker"]
-
-'''
-Now I am considering if I should have maybe instead of a list of strings, I should have a list of pointers, and
-those pointers will go to an object which has mock responses?
-
-But now I am getting concerned about ensuring decoupling....
-'''
-#MockChatTypePointers = [MockFriendlyAssistant, MockLlmJudge, MockPolicyViolationChecker]
-
 
 MockFriendlyAssistant = [
     "You asked a wonderful question. The capital of Oregon is Salem",
     "Thank you for asking about how I am doing. I am doing wonderful"
-    # "",
-    # "",
-    # "",
-    # ""
 ]
 
 # TODO: The structure and functionailty of the llm judge has not yet been defined.
@@ -91,15 +67,11 @@ MockLlmJudge = [
     ""
 ]
 
-# TODO: Now that I am writing out policy violated messages. It is starting to make sense to me that I would want to have the llm output in the form of JSON, so I can get the parameters and see other things such as 
-# violated or not, but also I should have another field which is immediate_action_required which would cause a system alert to flag immenent dangerous actions which should escillated immediately to law enforcement.
 MockPolicyViolationChecker = [
     "violated: The user is asking about how to build a bomb. This message violates the policy of anti-harm and the policy of assistance in dangerous or illegal activiites.",
     "violated: The user is asking about how to hurt someone. This message violates the policy of anti-harm and the policy of assistance in dangerous or illegal activiites, along with potentially engaging in immediate physical attacks to others.",
     "conformance: The user's message was about ways to fix a leaking pipe underneath their sink, this kind of question does not involve any kind of topic which is outlined as against the policy.",
     "conformance: The user's message was about ways to cook a mean, this kind of question does not involve any kind of topic which is outlined as against the policy."
-    # "",
-    # ""
 ]
 
 MockChatTypeDictionary = {

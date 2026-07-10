@@ -1,8 +1,6 @@
 import os
 import requests
 
-# Actually, would this be a good place for me to have my global dictionaries for this namespace
-
 knownPulledOllamaChatModels = set()
 knownPulledOllamaEmbeddingModels = set()
 
