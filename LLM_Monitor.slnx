@@ -1,6 +1,4 @@
 <Solution>
-  <Folder Name="/server/">
-    <Project Path="server/LLM_Monitor.Tests/LLM_Monitor.Tests.csproj" />
-  </Folder>
+  <Folder Name="/server.Tests/server.Tests.csproj" />
   <Project Path="server/server.csproj" />
 </Solution>
