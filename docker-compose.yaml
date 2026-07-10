@@ -59,6 +59,8 @@ services:
       - OPENAI_API_KEY=dummy-key-not-checked
       - ENABLE_OLLAMA_API=false
       - WEBUI_AUTH=false
+      - RAG_EMBEDDING_ENGINE=ollama
+      - HF_HUB_OFFLINE=1 
     volumes:
       - openwebui_data:/app/backend/data
     depends_on:
