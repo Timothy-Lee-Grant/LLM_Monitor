@@ -1,11 +1,13 @@
 from langgraph.graph import StateGraph, START, END
 from app.graph.state import ChatState
-from app.graph.nodes import policy_check_node
+from app.graph.nodes import *
 from langgraph.prebuilt import ToolNode, tool_condition
 
 
 def build_graph(checkpointer=None):
     g = StateGraph(ChatState)
+    g.add_node("policy_check", policy_check_node)
+    g.add_node("blocked", blocked_node)
     
 
 

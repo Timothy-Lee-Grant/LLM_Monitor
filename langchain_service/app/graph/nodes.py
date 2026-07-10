@@ -25,13 +25,11 @@ def policy_check_node(state: ChatState) -> dict:
     return {"policy_verdict": verdict.strip().lower(),
             "policy_reason": reason.strip()}
 
-# I wrote this one a long time ago (just to get an initial feel for what langgraph is doing)
-def retrieve_node(state: ChatState) -> dict:  
-    #Read what I need from the shared state
-    user_query = state["user_msg"]
+def retrieve_node(state: ChatState) -> dict:
+    usr_msg = state["messages"][-1].content
+    chunks = FindSemanticlyClosestElement(usr_msg, k=4)
+    return {"retrieved_chunks": chunks}
 
-    #Execute the atomic operation
-    topK_chunks = FindSemanticlyClosestElement(user_query, "supplemental_knowledge.md", 5)
-
-    #return a dict of ONLY the keys that I want t oupdate in the shared state
-    return {"chunks": topK_chunks}
+def blocked_node(state: ChatState) -> dict:
+    msg = f"I can't help with that. Policy check result: {state['policy_reason']}"
+    return {"answer": msg, "messages": [AIMessage(content=msg)]}
