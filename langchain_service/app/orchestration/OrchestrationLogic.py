@@ -1,7 +1,6 @@
-import app.prompts.MyPromptTemplates as pt
 from app.models.factory import ModelFactory
 from app.rag.Ingestion import FindSemanticlyClosestElement
-from app.prompts.MyPromptTemplates import *
+from app.prompts.MyPromptTemplates import PromptFactory
 
 from langchain_core.output_parsers import StrOutputParser
 
@@ -11,25 +10,26 @@ This will provide project an interface to perform logic
 '''
 
 
-# Ideally this would be wrapped up in a class which dynamically selects the operations based on parameters, but we are just trying to get things to work.
+# NOTE (Step 4 of the plan): these workers get refactored into registry pipelines
+# with a uniform signature. Step 2 only makes them correct.
 def test_langchain_chatnosecurity_worker(user_id, user_requested_model, user_message) -> str:
     # get a prompt
-    friendlyAssistentPrompt = GetHappyEncouragingAssistentRagPrompt()
+    friendlyAssistentPrompt = PromptFactory.get_assistant_prompt()
 
     # get a model
     model = ModelFactory.get_chat_model(user_requested_model)
 
     chain = friendlyAssistentPrompt | model | StrOutputParser()
 
-    # invoke model and return it
-    # TODO: as of now, friendlyAssistentPrompt does not take in any placeholder values for the user's message
-    model_response = chain.invoke({"user_message":user_message})
+    # The unified assistant prompt always declares {context}; the non-RAG path
+    # satisfies it with an empty string (per the PromptFactory docstring).
+    model_response = chain.invoke({"user_message": user_message, "context": ""})
 
     return model_response
 
 def test_langchain_chatnosecurityrag_worker(user_id, user_requested_model, user_message) -> str:
     # get a prompt
-    friendlyAssistentPrompt = GetHappyEncouragingAssistentRagPrompt()
+    friendlyAssistentPrompt = PromptFactory.get_assistant_prompt()
 
     # get top k nearest elements
     list_of_close_documents = FindSemanticlyClosestElement(user_message,k=2)

@@ -2,7 +2,7 @@ from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from app.models.factory import ModelFactory
 from app.rag.Ingestion import FindSemanticlyClosestElement
 from app.graph.state import ChatState
-from app.prompts.MyPromptTemplates import GetPolicyViolationCheckerPrompt
+from app.prompts.MyPromptTemplates import PromptFactory
 
 # Here we will define the nodes that flow from one to the other.
 
@@ -13,14 +13,18 @@ def policy_check_node(state: ChatState) -> dict:
     policy_chunks = FindSemanticlyClosestElement(user_msg, k=2)
     policy_text = "\n\n".join(d.page_content for d in policy_chunks)
 
-    model = ModelFactory.get_chat_model(state["disired_model"])
-    chain = GetPolicyViolationCheckerPrompt | model 
+    model = ModelFactory.get_chat_model(state["desired_model"])
+    # get_policy_checker_prompt is a method: call it, then pipe the *returned template* into the model
+    chain = PromptFactory.get_policy_checker_prompt() | model
 
-    raw = chain.invoke({"injectedCompanyPolicy": policy_text,
+    # invoke keys must match the template's placeholder names exactly
+    raw = chain.invoke({"injected_company_policies": policy_text,
                         "user_message": user_msg})
-    
+
     content_raw = raw.content
-    verdict, _, reason = content_raw.partition(":") # I don't know what this partition command is doing.
+    # str.partition(":") splits on the FIRST colon only, returning a 3-tuple
+    # (before, ":", after) — so "violated: reason: with colons" keeps the full reason intact.
+    verdict, _, reason = content_raw.partition(":")
 
     return {"policy_verdict": verdict.strip().lower(),
             "policy_reason": reason.strip()}

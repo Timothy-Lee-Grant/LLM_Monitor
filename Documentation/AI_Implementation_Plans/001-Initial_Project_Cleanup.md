@@ -289,6 +289,20 @@ Additions beyond the plan sketch (flagging for transparency): a reserved-future-
 
 No code touched. Awaiting your review of CONTRACTS.md and permission for Step 2.
 
+### [AI — 2026_07_10_23_35] Step 2 complete — langchain_service boots again
+
+All sub-steps executed as planned:
+
+- **2a** `factory.py`: dead import replaced with `from app.prompts.mock_prompts import MOCK_RESPONSES`. `MockChatModel` now has a `response_pool: list` pydantic field defaulting to the friendly-assistant pool, and `_generate` returns `random.choice(self.response_pool)` — your original commented-out intent, restored. Also normalized the embedding-model fallback URL from `ollama_service` to `ollama` (risk item 5 from the plan).
+- **2b** `OrchestrationLogic.py`: both workers use `PromptFactory.get_assistant_prompt()`; the non-RAG worker passes `context=""`. Removed the `import *` (it was how the dead-symbol breakage propagated silently — explicit imports make the next rename a loud ImportError at startup instead of a quiet request-time NameError).
+- **2c** `MyPromptTemplates.py`: unused `("placeholder", "{message}")` removed, comment marks where the chat-history slot returns with memory.
+- **2d** `nodes.py`: `PromptFactory.get_policy_checker_prompt()` called correctly, invoke keys fixed to match the template (`injected_company_policies` — the old code passed `injectedCompanyPolicy`, a third bug in that line beyond the two we knew about). `state.py`: `disired_model` → `desired_model`. `build_graph.py`: bad `tool_condition` import removed, TODO left pointing at Step 5. Answered your `partition(":")` comment question inline: it splits on the *first* colon only, returning `(before, ":", after)`, so reasons containing colons survive intact.
+- **2e** `main.py`: ingestion now runs before the server accepts traffic; `debug=True` removed (reloader double-imports the module).
+
+**Noted, not fixed (out of Step 2 scope):** `build_graph_old` references `agent_node`/`respond_node` which don't exist in `nodes.py` — it would NameError if called. Nothing calls it; Step 5 retires it to `old_implementations/`.
+
+**Verification status:** `py_compile` passes on all 11 service files; grep confirms zero remaining references to any dead symbol (`disired_model`, `MockChatTypeDictionary`, `tool_condition`, etc.). My sandbox has no PyPI/Docker access, so the runtime check is yours: run `./build.sh --mode mock`, then `curl :5001/` (hello JSON) and POST the two existing `/test/langchain/...` endpoints — both should now return random mock-pool responses instead of crashing.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

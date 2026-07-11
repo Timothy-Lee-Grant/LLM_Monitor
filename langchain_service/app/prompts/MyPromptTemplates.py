@@ -18,7 +18,7 @@ class PromptFactory:
                 "{context}\n"
                 "----"
             )),
-            ("placeholder", "{message}"),
+            # ("placeholder", "{chat_history}") slot returns here when memory is added
             ("user", "{user_message}")
         ])
     

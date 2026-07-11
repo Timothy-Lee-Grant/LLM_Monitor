@@ -4,7 +4,7 @@ from langgraph.graph.message import add_messages
 class ChatState(TypedDict):
     user_id: str
     user_msg: str
-    disired_model: str
+    desired_model: str
     policy_verdict: str
     policy_reason: str
     retrieved_chunks: list # list[Document]

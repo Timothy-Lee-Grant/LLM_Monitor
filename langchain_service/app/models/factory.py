@@ -5,17 +5,17 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
 from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
-from app.prompts.MyPromptTemplates import MockChatTypeDictionary, number_of_chat_types
+from app.prompts.mock_prompts import MOCK_RESPONSES
 from langchain_ollama import OllamaEmbeddings
 
 
 class MockChatModel(BaseChatModel):
+    # BaseChatModel is a pydantic model, so fields are declared as class attributes
+    # with type annotations (pydantic deep-copies mutable defaults per instance).
+    response_pool: list = MOCK_RESPONSES["friendly_assistant"]
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-
-        # I looked at an example for the two lines below
-        #generation = ChatGeneration(message=AIMessage(content=mockResponsesList[random.randint(0,number_of_chat_types-1)]))
-        generation = ChatGeneration(message=AIMessage(content="Fake response back"))
+        generation = ChatGeneration(message=AIMessage(content=random.choice(self.response_pool)))
         return ChatResult(generations=[generation])
     
     @property
@@ -55,7 +55,9 @@ class ModelFactory:
         if os.getenv("LLM_MODE") == "mock":
             return 
 
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama_service:11434")
+        # Fallback normalized to the compose *service* name (matches get_chat_model);
+        # in practice OLLAMA_BASE_URL is always set by docker-compose.
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
         res = TryGetOllamaEmbeddingModel("nomic-embed-text", base_url)
 
