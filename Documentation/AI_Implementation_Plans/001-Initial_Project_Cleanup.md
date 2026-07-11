@@ -157,7 +157,123 @@ So `POST host:5000/api/llm/chat/rag` and `POST host:5001/chat/rag` hit the ident
 
 ## Stage 3 (Implementation Planning)
 
-Not Gotten To Yet
+### [AI — 2026_07_10_23_17] Implementation Plan v1
+
+Design decisions carried in from Stage 2: true YARP proxy gateway; snake_case wire contract in one doc; 4 canonical endpoints reachable via two network paths; full mock RAG path (fake embeddings + real pgvector); pipeline registry for dispatch and growth; LangGraph without policy node or checkpointer; acceptance criteria per Stage 1 §3.
+
+**Ordering principle:** each step leaves the repo in a runnable state and is independently verifiable, so you can grant permission one step at a time in Stage 4 and check my work after each.
+
+Extra findings folded in (discovered while preparing this plan): `Yarp.ReverseProxy 2.3.0` is *already referenced* in `server.csproj` — Step 7 is wiring, not adding. The Python dockerfile uses `python:3.9.13-slim-buster` while CI uses 3.11 (and current langchain releases have dropped 3.9). `requirements.txt` is fully unpinned. CI's `if [ -f requirements.txt ]` looks at repo root where no such file exists, so CI has never installed the service's dependencies — the green pipeline was only running `test_fake.py` with no real imports.
+
+---
+
+#### Step 1 — Contract document (no code changes)
+
+Create `CONTRACTS.md` at repo root (it's an engineering artifact both services implement, not learning documentation, so it lives with the code).
+
+Contents:
+- **Canonical chat request** (all langchain_service pipeline endpoints): `{"user_id": str, "user_message": str, "requested_model": str}` — `requested_model` optional, defaults per LLM_MODE. Shape is additive-extensible (future `attachments`, `thread_id` are new optional fields, never renames).
+- **Canonical success response**: `{"status": "success", "response": str, "metadata": {"pipeline_id": str, "model_used": str, "retrieved_sources": [str], "latency_ms": int}}`.
+- **Canonical error response**: `{"status": "error", "error": {"code": str, "message": str}}` with HTTP status matching (400 malformed, 502 upstream model failure, 500 internal).
+- **OpenAI-compatible surface** (`/v1/models`, `/v1/chat/completions`): follows OpenAI schema verbatim; documents the model-id → pipeline-id mapping rule.
+- **Network topology table**: which ports exist, which are dev-only, gateway route prefixes.
+
+Verification: you read and approve the document. Every later step cites it.
+
+#### Step 2 — langchain_service boots again (minimal fixes, no restructuring)
+
+Smallest set of changes to get the service importable and serving in mock mode:
+
+2a. `app/models/factory.py`: replace dead import with `from app.prompts.mock_prompts import MOCK_RESPONSES`; `MockChatModel` gains an optional `response_pool` (defaults to friendly-assistant pool) and returns a random element — restoring your original commented-out intent.
+2b. `app/orchestration/OrchestrationLogic.py`: call `PromptFactory.get_assistant_prompt()`; non-RAG worker passes `context=""` (the design already anticipated this in the docstring).
+2c. `app/prompts/MyPromptTemplates.py`: remove the unused `("placeholder", "{message}")` line (it's for chat-history injection we aren't doing yet; reintroduced later with memory).
+2d. `app/graph/nodes.py` + `build_graph.py`: fix the `PromptFactory` usage, remove `ToolNode, tool_condition` import (tools are a non-goal), fix `disired_model` → `desired_model` in `state.py` and all readers.
+2e. `main.py`: run ingestion *before* `app.run`, drop `debug=True` (the reloader double-executes module-level code; we lose hot reload, gain determinism).
+
+Verification: `./build.sh --mode mock` → container starts, `GET :5001/` returns the hello JSON, existing two POST endpoints return mock responses.
+
+#### Step 3 — RAG layer: real in mock mode, idempotent, no import-time side effects
+
+3a. New `app/rag/vector_store.py`: a `VectorStoreManager` class — connection string built from env, explicit `initialize()` called from `main.py`, no module-level globals executing at import (current `Ingestion.py` computes `mode` at import time, which is why mock-checks are scattered).
+3b. **Mock embeddings**: `ModelFactory.get_embedding_model` returns `DeterministicFakeEmbeddings` (from `langchain_core.embeddings.fake` — deterministic per input text) when `LLM_MODE=mock`. pgvector now runs identically in both modes; only the embedding source differs. The mock-mode early-returns in retrieval/ingestion are deleted.
+3c. **Idempotent ingestion**: compute `id = sha256(page_content)` per document and pass `ids=` to `add_documents` — langchain-postgres upserts on ID, so re-running ingestion N times yields exactly one row per document. Seed docs move to `app/rag/seed_documents.py`.
+3d. Retrieval: `find_similar(message, k, score_threshold=None)` using `similarity_search_with_score`, threshold unused for now but present per your erroneous-retrieval concern (answering the question in your `Ingestion.py` comment).
+
+Verification: mock build; `docker exec` into pgvector, `SELECT count(*) FROM langchain_pg_embedding;` — run ingestion twice (restart container), count unchanged (acceptance criterion 4). Retrieval returns the seeded docs for an on-topic query.
+
+#### Step 4 — Pipeline registry + orchestration refactor
+
+4a. New `app/orchestration/registry.py`: `PIPELINES: dict[str, Pipeline]` where a `Pipeline` is `(id, description, handler)` and every handler has the uniform signature `handle(request: ChatRequest) -> ChatResponse` (dataclasses mirroring CONTRACTS.md).
+4b. `OrchestrationLogic.py` becomes `app/orchestration/pipelines.py` with four registered entries: `chat-basic`, `chat-rag`, `graph-basic`, `graph-rag`. The two chain pipelines are your existing workers refactored to the uniform signature; prompt/model/retriever acquisition is shared, not duplicated.
+4c. Old files move to `old_implementations/` (matching your existing convention) rather than being deleted.
+
+Verification: pytest unit tests — registry contains exactly 4 ids; each handler returns a contract-shaped response in mock mode (no containers needed).
+
+#### Step 5 — LangGraph completion
+
+5a. `build_graph(with_rag: bool)` — single builder, compiled twice at startup into the two graph pipelines: `START → retrieve (skipped/no-op when with_rag=False) → agent → respond → END`. State: `desired_model`, `retrieved_chunks`, `messages` (with `add_messages` reducer), `answer`.
+5b. `graph-basic` / `graph-rag` registry entries invoke the pre-compiled graphs — compiled once at startup, shared statelessly across requests (the Q5 concurrency model, now in code).
+5c. `build_graph_old` and the policy/blocked nodes move to `old_implementations/` (policy checking is a non-goal; the prompt stays in `PromptFactory` for the future).
+5d. Growth path documented in module docstring: new capability = new node + edge in the builder, or new registry entry; memory later = checkpointer param already threaded through `build_graph`.
+
+Verification: pytest — both graph pipelines return contract-shaped responses in mock mode; `retrieved_sources` empty for basic, populated for rag.
+
+#### Step 6 — Flask API layer rebuilt on the registry
+
+6a. `FlaskServer.py`: routes per CONTRACTS.md — `POST /chat/basic`, `/chat/rag`, `/graph/basic`, `/graph/rag`, each a thin shim: validate → build `ChatRequest` → `PIPELINES[id].handler(req)` → jsonify. Request validation returns contract-shaped 400s. Unhandled exceptions → contract-shaped 500s via a Flask error handler (no stack traces on the wire).
+6b. `GET /v1/models`: generated from the registry (each pipeline id becomes a model id, e.g. `llm-monitor.graph-rag`). `POST /v1/chat/completions`: parses OpenAI shape, maps model id → pipeline, invokes, wraps the pipeline response in an OpenAI completion object. The hardcoded stub dies. (Streaming/SSE: deliberately deferred, OpenWebUI works without it.)
+6c. `GET /healthz`: returns 200 + mode; used by compose healthcheck in Step 8.
+6d. Dockerfile: base image → `python:3.11-slim`, run under `gunicorn` (2 workers) instead of the Flask dev server; ingestion runs in an entrypoint before gunicorn starts so it executes exactly once, not per-worker.
+
+Verification: mock build; curl all 4 endpoints on :5001 → 200 + contract JSON (acceptance criterion 1); curl `/v1/models` and `/v1/chat/completions` → OpenAI-shaped responses containing real pipeline output.
+
+#### Step 7 — dotnet gateway becomes a real YARP proxy
+
+7a. `Program.cs`: `builder.Services.AddReverseProxy().LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"))` and `app.MapReverseProxy()`. Package already referenced. `TelemetryMiddleware` stays exactly where it is in the pipeline — it now observes proxied traffic.
+7b. `appsettings.json` ReverseProxy config: route `/api/llm/{**catch-all}` → cluster `langchain` (path transform strips the `/api/llm` prefix); route `/v1/{**catch-all}` → same cluster (for OpenWebUI). Cluster destination from env var `LANGCHAIN_BASE_URL` (set in compose) so nothing is hardcoded.
+7c. `LlmController.cs` and `TestController.cs` retired to a `server/old_implementations/` folder (excluded from compilation) — same convention as Python.
+7d. Extension points documented as comments where auth/rate-limiting middleware will slot in (explicit non-goals now).
+
+Verification: mock build; curl `host:5000/api/llm/chat/rag` → identical response to `host:5001/chat/rag` (acceptance criterion 2); dotnet_server logs show telemetry entries for the proxied request.
+
+#### Step 8 — docker-compose alignment
+
+8a. `openwebui.OPENAI_API_BASE_URL` → `http://dotnet_server:8080/v1` (the commented-out line comes back to life — OpenWebUI now goes through the gateway, acceptance criterion 5).
+8b. `dotnet_server`: add `LANGCHAIN_BASE_URL=http://langchain_service:5000`, `depends_on: langchain_service: condition: service_healthy`.
+8c. `langchain_service`: healthcheck hitting `/healthz`.
+8d. Note (no action): port `5001:5000` mapping is the dev/test path per Stage 2; removing it later is the lockdown switch.
+
+Verification: full mock stack up; open OpenWebUI at :3000, pick a pipeline model, send a message, receive a mock-pipeline response that transited the gateway (confirmed via dotnet telemetry logs).
+
+#### Step 9 — Tests + CI made honest
+
+9a. Pin `requirements.txt` versions; add `requirements-dev.txt` (pytest).
+9b. pytest suite replacing `test_fake.py`: contract-shape tests for all 4 pipelines (mock mode, Flask test client — no containers), registry integrity, ingestion ID determinism (pure function), OpenAI endpoint shape tests.
+9c. `ci.yml`: fix the working directory so dependencies actually install (`langchain_service/requirements.txt`), run pytest with `LLM_MODE=mock`; re-enable the C# job (fixing the `setup-detnet` typo) to at least `dotnet build`.
+
+Verification: `pytest` green locally; push to a branch → CI green with tests demonstrably importing real app code (acceptance criterion 6).
+
+#### Step 10 — Live-mode verification & Stage 5 handoff
+
+No new features — a scripted acceptance pass:
+10a. `./build.sh --mode live` (small model, e.g. `qwen2.5:1.5b`); ingestion runs with real `nomic-embed-text` embeddings.
+10b. Criterion 3: POST a question answerable only from a seed doc to `/chat/rag` and `/graph/rag`; response must contain the doc's content; same question to `/chat/basic` must not.
+10c. Criterion 4 re-check under live embeddings (restart, count rows).
+10d. Full criteria matrix results written into Stage 5 of this document.
+
+---
+
+#### Risks / open items I want you aware of before approving
+
+1. **langchain-postgres upsert semantics** (Step 3c): I'm relying on `add_documents(ids=...)` overwriting on conflict. If the installed version inserts-only, fallback is delete-by-id-then-add. Verified during Step 3, flagged in Stage 4 notes if behavior differs.
+2. **Python 3.9 → 3.11 + pinning** may surface dependency resolution changes; Step 2 verification catches this early since it rebuilds the image.
+3. **OpenWebUI without streaming** (Step 6b): responses appear all-at-once. Acceptable for this cleanup; SSE is on your roadmap already.
+4. **`/v1` routed through gateway** (Step 7b) means OpenWebUI traffic appears in telemetry — intended, but telemetry volume grows.
+5. **Ollama URL inconsistency** noticed in passing: factory default is `http://ollama:11434` (service name) but `get_embedding_model` defaults to `http://ollama_service:11434` (container name). Compose sets the env var so it works today; Step 2 normalizes both fallbacks to the env-var-first pattern.
+
+### Stage 3 Discussion Subsection
+
+Awaiting Timothy's review of Implementation Plan v1.
 
 ### Stage 3 Discussion Subsection
 
