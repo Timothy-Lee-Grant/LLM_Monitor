@@ -303,6 +303,19 @@ All sub-steps executed as planned:
 
 **Verification status:** `py_compile` passes on all 11 service files; grep confirms zero remaining references to any dead symbol (`disired_model`, `MockChatTypeDictionary`, `tool_condition`, etc.). My sandbox has no PyPI/Docker access, so the runtime check is yours: run `./build.sh --mode mock`, then `curl :5001/` (hello JSON) and POST the two existing `/test/langchain/...` endpoints — both should now return random mock-pool responses instead of crashing.
 
+### [AI — 2026_07_10_23_48] Step 2 addendum — dead-code remnants retired (Timothy's request)
+
+Per your request, all `*_old`/practice remnants moved out of active code into `old_implementations/` (nothing deleted — your notes are preserved verbatim, each with a header explaining provenance):
+
+- `app/graph/build_graph.py` → `build_graph_old` moved to `langchain_service/old_implementations/build_graph_old.py`. Header notes it references `agent_node`/`respond_node` that were never written — it would NameError if called.
+- `app/api/FlaskServer.py` → the commented `t1()` dispatch-dict draft moved to `langchain_service/old_implementations/notes_v1_dispatch_draft.py`. Its header credits the idea as the origin of the registry pattern in CONTRACTS.md §4.
+- `server/controllers/LlmController.cs` → 100-line commented `LlmController_old` block moved to `server/old_implementations/LlmController_old.cs`.
+- `server/controllers/TestController.cs` → the 113-line `/* ... */` practice block (serialization experiments, from-memory `LlmChatCall` attempt) moved to `server/old_implementations/TestController_practice_notes.cs`.
+
+One thing to be aware of: SDK-style csproj files auto-compile every `.cs` under the project folder, so `server/old_implementations/*.cs` WILL be picked up by the compiler. Both files are 100% comments, so this is harmless today — but Step 7 adds an explicit `<Compile Remove="old_implementations/**" />` so future retirements there can contain real (uncommented) code safely.
+
+Verification: `py_compile` passes on the touched Python files; grep shows zero `_old` references left in `langchain_service/app/` or `server/controllers/`.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

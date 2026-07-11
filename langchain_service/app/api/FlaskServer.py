@@ -57,15 +57,8 @@ def IntializeFlaskEndpoints():
             ]
         })
     
-    '''
-    @app.route("/v1/chat/completions", method=["POST"])
-    def t1():
-        package = request.get_json()
-        agent_path = package["model"]
-        llm_response = agents_paths_available[agent_path]() # I think I would implement this by having agents_paths_available as a dict where key is the string, and val us the orchistration method
-        return jsonify({"status":"success", "llm_response":llm_response})
-    '''
-
+    # (Draft dispatch-dict sketch for this route moved to old_implementations/notes_v1_dispatch_draft.py —
+    #  the idea itself is now the registry pattern in CONTRACTS.md §4, implemented in plan 001 Step 4/6.)
     @app.route("/v1/chat/completions", methods=["POST"])
     def chat_completions():
         data = request.get_json()
