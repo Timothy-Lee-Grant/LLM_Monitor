@@ -362,6 +362,26 @@ If the second count differs from the first, risk item 1 fired (add_documents not
 
 **Verification status:** `py_compile` clean on all new/touched files; grep shows no remaining `OrchestrationLogic` or worker-function references in `app/` (only the stale `__pycache__` noted above). Runtime: the same two curl commands from Step 2/3 now return the full contract JSON (status/response/metadata) — plus `tests/test_registry.py` above.
 
+### [AI — 2026_07_11_00_31] Step 5 complete — LangGraph pipelines live
+
+**What changed:**
+
+- **5a** `build_graph(with_rag: bool, checkpointer=None)` — one builder, two shapes: `START → agent → respond → END` and `START → retrieve → agent → respond → END`. Design choice worth understanding: RAG is decided by **conditional wiring at build time**, not a no-op node checking a flag per request — the compiled graph contains only the steps it actually runs. The checkpointer parameter is threaded through now (unused), so adding memory later is an argument, not a refactor.
+- `state.py`: `ChatState` slimmed to `user_id`, `desired_model`, `retrieved_chunks`, `messages`, `answer` (policy fields and the redundant `user_msg` dropped). Your old *"Investigate this"* comment on `add_messages` is answered in the docstring: it's a **reducer** — a node returning `{"messages": [x]}` gets *appended* (deduped by message id) instead of overwriting the list; every other field is last-write-wins. That's the mechanism multi-turn memory will ride on.
+- `nodes.py`: `retrieve_node` (k=4), new `agent_node` (context from state → shared PromptFactory/ModelFactory chain → `answer`), new `respond_node` (commits `answer` to history as an `AIMessage`; deliberately separate — it's the future seam for citation formatting/output grading without touching model invocation). Nodes use the *same* components as the chain pipelines: one set of building blocks, two execution engines.
+- **5b** `pipelines.py`: graphs compiled **once at import** into `_GRAPH_BASIC`/`_GRAPH_RAG` (compilation is pure assembly — no network/DB), then shared statelessly; every `.invoke()` carries its own state dict, so concurrent users never interact (the Q5 concurrency answer, now literally in the code comments). Placeholders replaced by `graph_basic`/`graph_rag` handlers via a shared `_run_graph` body; `retrieved_sources` extracted from final state.
+- **5c** Old policy/blocked nodes preserved at `old_implementations/graph_policy_nodes_v1.py`; the policy-checker prompt remains live in `PromptFactory` for when that feature is scheduled.
+- **5d** Growth path documented in the `build_graph.py` module docstring (new step = node+edge; new flow = builder variant + registry entry; memory = checkpointer + thread_id).
+- Test updated: the Step 4 placeholder test is replaced by `test_graph_basic_returns_contract_shape` — graph-basic is fully unit-testable in mock mode since it has no retrieve node. graph-rag joins the Step 9 integration tier (needs pgvector).
+
+**Verification:** `py_compile` clean; grep confirms no `policy_check_node`/`blocked_node`/`NotImplementedError` remnants in `app/` (stale `__pycache__` aside). For you:
+
+```
+cd langchain_service && LLM_MODE=mock python -m pytest tests/test_registry.py -v   # 4 tests, all green
+```
+
+All four registry pipelines are now real. Flask routes for the graph pipelines don't exist yet — that's Step 6, which is also where `/v1/chat/completions` stops being a stub.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

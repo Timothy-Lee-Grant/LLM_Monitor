@@ -1,10 +1,10 @@
-"""Step 4 verification tests (plan 001). Run from langchain_service/:
+"""Step 4/5 verification tests (plan 001). Run from langchain_service/:
 
     LLM_MODE=mock python -m pytest tests/test_registry.py -v
 
-No containers needed: chat-basic never touches the network in mock mode.
-chat-rag requires a live pgvector connection, so its test arrives with the
-Step 9 suite (integration tier).
+No containers needed: chat-basic and graph-basic never touch the network in
+mock mode. chat-rag and graph-rag require a live pgvector connection, so
+their tests arrive with the Step 9 suite (integration tier).
 """
 
 import os
@@ -44,7 +44,15 @@ def test_chat_basic_returns_contract_shape():
     assert isinstance(metadata["latency_ms"], int)
 
 
-def test_graph_pipelines_are_honest_placeholders_until_step_5():
-    for pipeline_id in ("graph-basic", "graph-rag"):
-        with pytest.raises(NotImplementedError):
-            get_pipeline(pipeline_id).handler(ChatRequest(user_message="hello"))
+def test_graph_basic_returns_contract_shape():
+    """Step 5: the compiled graph produces the same contract as the chains."""
+    response = get_pipeline("graph-basic").handler(ChatRequest(user_message="hello")).to_dict()
+
+    assert response["status"] == "success"
+    assert isinstance(response["response"], str) and response["response"]
+
+    metadata = response["metadata"]
+    assert metadata["pipeline_id"] == "graph-basic"
+    assert metadata["model_used"] == "mock-stub-provider"
+    assert metadata["retrieved_sources"] == []  # no retrieve node in this graph
+    assert isinstance(metadata["latency_ms"], int)
