@@ -440,6 +440,29 @@ docker logs dotnet_server | grep telemetry                           # entries f
 
 That's acceptance criterion 2 (same responses via gateway routes). Step 8 rewires OpenWebUI through this gateway and adds healthchecks.
 
+### [AI — 2026_07_11_01_12] Step 8 complete — compose topology aligned
+
+**What changed (docker-compose.yaml only):**
+
+- **8a** `openwebui.OPENAI_API_BASE_URL` → `http://dotnet_server:8080/v1` — your commented-out line from months ago, resurrected. Every OpenWebUI chat now transits telemetry → YARP → langchain_service. `depends_on` switched from langchain_service to dotnet_server accordingly.
+- **8b** `dotnet_server.depends_on` upgraded from plain list to `langchain_service: condition: service_healthy` — the gateway doesn't start until its upstream can actually serve. No env var needed for the YARP destination (appsettings default already matches the compose service name); a commented override using the `ReverseProxy__...` double-underscore form is in place for when you want to retarget without a rebuild.
+- **8c** `langchain_service` healthcheck hits `/healthz`. Implementation detail that matters: `python:3.11-slim` ships neither curl nor wget, so the probe is stdlib `urllib.request` via `python -c`. `start_period: 20s` covers image boot + the one-time RAG ingestion in the entrypoint (probe failures during start_period don't count against retries).
+- **8d** The `5001:5000` dev mapping stays, now with the CONTRACTS.md §6 comment marking it as the production lockdown switch.
+
+**Startup chain now encoded in compose:** pgvector healthy → langchain ingests + serves → healthy → gateway starts → OpenWebUI starts. A half-initialized system can no longer accept traffic in the wrong order.
+
+**Verification (for you — full-stack, acceptance criterion 5):**
+
+```
+./build.sh --mode mock
+docker compose -p llm_monitor ps        # langchain_service should show (healthy)
+# open http://localhost:3000 — model dropdown should list all four llm-monitor.* pipelines
+# pick llm-monitor.chat-rag, send a message, get a mock-pool response back
+docker logs dotnet_server | grep telemetry   # the OpenWebUI traffic, proxied
+```
+
+Watch-item from Step 6 applies here: if the model list appears but chat responses never render, that's the `stream: true` issue — tell me and I'll add the single-chunk SSE wrapper. Remaining: Step 9 (tests/CI) and Step 10 (live-mode acceptance pass).
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
