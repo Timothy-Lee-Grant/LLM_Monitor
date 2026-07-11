@@ -490,6 +490,43 @@ git push origin <branch>                            # CI: both jobs green, pytho
 
 That's acceptance criterion 6 modulo the lock-file follow-up. Step 10 (live-mode acceptance pass) closes out the plan.
 
+### [AI — 2026_07_11_01_44] Step 10 complete — scripted acceptance pass delivered; execution is yours
+
+No new features, as planned. The deliverable is `scripts/acceptance_check.sh` — one script, run once per mode:
+
+```
+./build.sh --mode mock && bash scripts/acceptance_check.sh mock
+./build.sh --mode live && bash scripts/acceptance_check.sh live      # uses your small-model default (qwen2.5:1.5b via build.sh)
+```
+
+What it automates, mapped to the Stage 1 criteria: **[1]** all four pipeline endpoints direct on :5001, field-level contract assertions; **[2]** the same four via the gateway `/api/llm/*` plus `/v1/models` through YARP; **§3 error paths** (400 missing message, 404 unknown model); **[3]** `retrieved_sources` contains the seed doc for RAG routes and is empty for basic — in live mode it also prints the RAG vs basic answers side-by-side for your human judgment on whether the model *visibly used* the policy text; **[4]** row count in the mode's collection before and after a `docker restart` (expects 2 → 2). Criteria **[5]** (OpenWebUI round-trip + gateway telemetry) and **[6]** (pytest/CI) are printed as manual steps at the end.
+
+Design notes: no `set -e` — an acceptance pass runs *every* check and reports, rather than dying at the first failure; JSON assertions are python3 one-liners (no jq dependency); `wait_healthy` polls `/healthz` so the restart check can't race ingestion; row counts are scoped to `company_policies_<mode>` via the collection join, so mock and live runs don't contaminate each other's criterion 4.
+
+Verified here: bash syntax, the JSON-assert helper against a real contract body, and the route-substitution idiom. Network execution is on your machine.
+
+**This closes Stage 4.** Run both passes and paste the two summary blocks (plus criteria 5/6 results) into Stage 5 below — the matrix is scaffolded and waiting. If anything FAILs, we handle it as a Stage 5 finding, not a silent re-edit: the plan stays an honest record.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
-Not Gotten To Yet
+### Acceptance criteria matrix (fill from acceptance_check.sh output)
+
+| # | Criterion (Stage 1 §3) | Mock | Live | Evidence / notes |
+|---|---|---|---|---|
+| 1 | 4 test endpoints return 200 + contract JSON | ☐ | n/a | `acceptance_check.sh mock` criterion-1 block |
+| 2 | Same via dotnet gateway routes | ☐ | n/a | criterion-2 block + telemetry log lines |
+| 3 | Live RAG response demonstrably uses ingested content | n/a | ☐ | criterion-3 block + side-by-side answers |
+| 4 | Re-running ingestion yields no duplicate rows | ☐ | ☐ | criterion-4 block (2 → 2) |
+| 5 | OpenWebUI round-trips through the real pipeline | ☐ | ☐ | manual: chat at :3000 + `docker logs dotnet_server \| grep telemetry` |
+| 6 | pytest suite passes in CI | ☐ | n/a | local `pytest -v` (18 tests) + CI run link |
+
+### Results log (chronological — paste script output and observations below)
+
+*(awaiting Timothy's mock and live runs)*
+
+### Known deferred items (carried out of plan 001, not failures)
+
+- `requirements.lock` generation + dockerfile/CI switch to it (Step 9a deviation — needs Timothy's one `pip freeze` command from a working build).
+- OpenWebUI `stream: true`: if chat renders no output despite 200s, add the single-chunk SSE wrapper (Step 6 watch-item).
+- pgvector upsert semantics (plan risk 1): confirmed or refuted by criterion 4's 2 → 2 check.
+- Score threshold for retrieval quality is implemented but disabled (`score_threshold=None`) — tuning belongs to the evaluation-harness roadmap item, with real metrics instead of guesses.
