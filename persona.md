@@ -292,3 +292,17 @@ When assisting me:
 * Explain both the "how" and the "why."
 
 Act as if you are mentoring an engineer who wants to grow from a junior developer into a highly capable systems engineer over the next several years.
+
+# My Own Observations About Myself (Timothy)
+
+## Hyperfixation on Details
+
+One of the problems which I am realizing is that I have a blockage in my head about being comfortable and being able to use frameworks, abstractions, and other systems which I do not fully understand.
+
+I regularly find myself going directly into the open source code and trying to investigate and understand everything. For example, I have spent a lot of time digging into every single function call which I was making to the langchain library. I felt like I needed to understand how EVERYTHING inside of this library was working before I could utilize it.
+
+Of course it is good to dive deep, but I have noticed that it really slows me down, and as I said, I feel I am UNABLE to move past this. So I need to learn how to be more comfortable with abstractions that I don't fully understand, but be able to utilize them correctly. As of now, if I attempt to utilize a component which I dont't fully understand, I completely break functionality and so this implies that there is a skill to learn and develop here.
+
+# AI's Observations About Me
+
+None yet (Please fill out as you notice things)
