@@ -416,6 +416,30 @@ curl -s -X POST localhost:5001/v1/chat/completions -H "Content-Type: application
 
 This is acceptance criterion 1 in full (all 4 endpoints, 200 + contract JSON, mock mode). Next: Step 7 (YARP) unlocks criterion 2.
 
+### [AI — 2026_07_11_01_02] Step 7 complete — the dotnet server is now a real YARP gateway
+
+**What changed:**
+
+- **7a** `Program.cs` rewritten: `AddReverseProxy().LoadFromConfig(...)` + `app.MapReverseProxy()`. Pipeline order is documented in the code because the order IS the architecture: `telemetry → [future auth] → [future rate limiter] → YARP forwarder`. Controllers-related services (`AddControllers`, `AddHttpClient`, `MapControllers`) are gone — the gateway forwards, it doesn't orchestrate. Added `GET /healthz` (minimal API) as the gateway's own liveness probe. Your two old comment-questions are answered inline: `UseTelemetryMiddleware` works on `app` because it's an *extension method* (`this IApplicationBuilder` makes it callable on the receiver) and it registers into the request *pipeline*, not DI; no `using` is needed because the extension class shares the `LLM_MONITOR.server` namespace.
+- **7b** `appsettings.json` gains the `ReverseProxy` section: route `llm-pipelines` matches `/api/llm/{**catch-all}` with a `PathRemovePrefix` transform (so `/api/llm/chat/rag` → `/chat/rag` upstream); route `openai-surface` matches `/v1/{**catch-all}` unchanged (for OpenWebUI). One cluster, `langchain`, default destination `http://langchain_service:5000/`. **Deviation from plan, flagged:** instead of a custom `LANGCHAIN_BASE_URL` variable parsed in code, the destination is overridable via ASP.NET's built-in config-from-env mechanism (`ReverseProxy__Clusters__langchain__Destinations__primary__Address`) — zero custom code, and it's the idiomatic pattern (double underscore = config path separator). Step 8's compose note reflects this.
+- **Necessary addition:** `TelemetryMiddleware` was an empty skeleton (comments only) — it now logs `method / path / status / elapsed_ms` per request via structured logging, with a Stopwatch around `await _next(...)`. Without this, the step's own verification ("telemetry entries for proxied requests") was unfalsifiable. The in/out halves of the middleware are commented; a TODO points at the OpenTelemetry future from your roadmap.
+- **7c** Both controllers retired to `server/old_implementations/{LlmController_v1.cs, TestController_v1.cs}` and the `controllers/` folder removed. `server.csproj` now has `<Compile Remove="old_implementations/**" />` — the archive folder is officially invisible to the compiler (closing the caveat from the Step 2 addendum; real uncommented code can live there safely now). `server.Tests` has no reference to the retired controllers (placeholder test only).
+- **7d** Auth/rate-limiter extension points are explicit commented lines in the pipeline with the service registrations they'd need.
+
+**Verification (for you — my sandbox has no dotnet SDK, so compile check is yours):**
+
+```
+cd server && dotnet build            # first: confirms YARP config-by-code compiles
+./build.sh --mode mock               # then the real test through the gateway:
+curl localhost:5000/healthz                                          # gateway itself
+curl -s -X POST localhost:5000/api/llm/chat/rag -H "Content-Type: application/json" \
+  -d '{"user_message":"can I use scripting tools?"}'                 # should EXACTLY match localhost:5001/chat/rag
+curl localhost:5000/v1/models                                        # OpenAI surface via gateway
+docker logs dotnet_server | grep telemetry                           # entries for the proxied calls
+```
+
+That's acceptance criterion 2 (same responses via gateway routes). Step 8 rewires OpenWebUI through this gateway and adds healthchecks.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

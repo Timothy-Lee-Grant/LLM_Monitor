@@ -1,3 +1,6 @@
+// Retired from controllers/ during plan 001 Step 7 (2026_07_11): the gateway is now a YARP reverse proxy;
+// controller-based forwarding (and its 4 bugs, see Stage 2 findings #7) is superseded. Reference only — excluded from compilation.
+
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 using System.ComponentModel.DataAnnotations;
