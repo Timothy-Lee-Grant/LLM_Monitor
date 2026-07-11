@@ -42,3 +42,29 @@ This folder will contain one single file which are used to capture the state of 
 ## AI_Implementation_Plans
 
 Documents in this folder will be for implementation plans which the AI will create for themselves to be able to reviewed by Timothy, and then with permission from Timothy followed though step by step. 
+
+These documents will have multiple stages. Within each stage, a dynamic conversation will take place. The way it will work is that each markdown will appended in a chronological order. There will be a discussion between Timothy and the AI to communicate between each other and come to an eventually conclusion. 
+
+Then the next stage will upon up and there can be another back and forth conversation.
+
+## Stage 1 (Discussion)
+
+Stage 1 will be a dynamic conversation between Timothy and the AI agent. Discussions will take place in describing the feature desired to be implemented, potential issues, technical difficulties, architecture designs and considerations, 
+
+## Stage 2 (Implementation Planning)
+
+Stage 2 will be where the AI takes the conversation and direction described in Stage 1, and creates a full detailed implementation plan. This will be a step by step 
+
+### Stage 2 Discussion Subsection
+
+This subsection will be where the dynamic conversation takes place. This will be another chronological discussion where Timothy and the AI discuss the Implementation Plan developed by the AI. 
+
+As this conversation goes back and forth, the AI will make changes to the Implementation Plan. (Notice that this means that the implementation plan will be dynamic and not a chronological timeline.)
+
+## Stage 3 (Implementation)
+
+Stage 3 will begin once Stage 2 has been agreed upon. 
+
+## Stage 4 (Final Results, Testing, Verficiation)
+
+Once
