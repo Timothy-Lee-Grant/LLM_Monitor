@@ -463,6 +463,33 @@ docker logs dotnet_server | grep telemetry   # the OpenWebUI traffic, proxied
 
 Watch-item from Step 6 applies here: if the model list appears but chat responses never render, that's the `stream: true` issue — tell me and I'll add the single-chunk SSE wrapper. Remaining: Step 9 (tests/CI) and Step 10 (live-mode acceptance pass).
 
+### [AI — 2026_07_11_01_28] Step 9 complete — tests and CI made honest
+
+**What changed:**
+
+- **9b** Test suite (`test_fake.py` deleted — it was `assert True`, the ghost that kept your pipeline green while testing nothing):
+  - `conftest.py` at the service root — sets `LLM_MODE=mock` before any app import and provides a fresh Flask test client per test (the application-factory payoff from Step 6). Placed at the root, not in `tests/`, deliberately: pytest adds a conftest's directory to `sys.path`, which is what makes `import app...` resolve regardless of invocation directory.
+  - `tests/test_api_contract.py` — 10 tests over the HTTP surface: `/healthz`, all four pipeline routes (parametrized, field-by-field §2 assertions), missing/malformed-body 400s, `/v1/models` registry generation, `/v1/chat/completions` round-trip, unknown-model 404, missing-user-turn 400. **Key technique:** retrieval is monkeypatched on the `vector_store` singleton — pipelines, graph nodes, and routes all share that one object, so `/chat/rag` and `/graph/rag` are fully testable with zero containers, including asserting `retrieved_sources` comes back populated.
+  - `tests/test_ingestion_ids.py` — pins the idempotency guarantee at its root: id is a pure function of content (same content → same id even with different metadata; matches `sha256` exactly; seed docs unique). The docker row-count check verifies the *database* behavior; these verify the *invariant* that makes it work.
+  - `tests/test_registry.py` — unchanged from Steps 4/5.
+- **9c** `ci.yml` rewritten. The confession-worthy fix: `working-directory: langchain_service` — the old workflow's `if [ -f requirements.txt ]` looked at the repo root, found nothing, installed nothing, and passed vacuously. Now: Python 3.11 (matching the runtime image), real dependency install (+ `requirements-dev.txt`), `LLM_MODE=mock python -m pytest -v`. C# job re-enabled with the `setup-detnet` typo fixed: `dotnet build` on the gateway + `dotnet test` on server.Tests.
+- **9a — deviation from plan, flagged:** requirements are NOT exact-pinned in this step. Reason: my sandbox has no PyPI access, so any exact versions I wrote would be guesses — and a guessed pin that's wrong breaks your build *immediately* (worse than floating). The honest path: pin from a **resolved, working environment**. After your next successful `./build.sh --mode mock`, run:
+
+  ```
+  docker compose -p llm_monitor exec langchain_service pip freeze > langchain_service/requirements.lock
+  ```
+
+  and I'll switch the dockerfile and CI to install from the lock (one-line changes each) in a follow-up. `requirements-dev.txt` (pytest) added as planned.
+
+**Verification (for you):**
+
+```
+cd langchain_service && python -m pytest -v        # expect 18 tests, all green, no containers running
+git push origin <branch>                            # CI: both jobs green, python job visibly installing real deps
+```
+
+That's acceptance criterion 6 modulo the lock-file follow-up. Step 10 (live-mode acceptance pass) closes out the plan.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

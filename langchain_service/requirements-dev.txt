@@ -1,0 +1,2 @@
+# Test/dev-only dependencies — never installed in the runtime image.
+pytest
