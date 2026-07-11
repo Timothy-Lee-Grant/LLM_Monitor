@@ -1,5 +1,5 @@
 from app.models.factory import ModelFactory
-from app.rag.Ingestion import FindSemanticlyClosestElement
+from app.rag.vector_store import vector_store
 from app.prompts.MyPromptTemplates import PromptFactory
 
 from langchain_core.output_parsers import StrOutputParser
@@ -32,7 +32,7 @@ def test_langchain_chatnosecurityrag_worker(user_id, user_requested_model, user_
     friendlyAssistentPrompt = PromptFactory.get_assistant_prompt()
 
     # get top k nearest elements
-    list_of_close_documents = FindSemanticlyClosestElement(user_message,k=2)
+    list_of_close_documents = vector_store.find_similar(user_message, k=2)
 
     added_context = "\n\n".join([doc.page_content for doc in list_of_close_documents])
 

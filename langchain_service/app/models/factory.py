@@ -2,6 +2,7 @@ import os
 import random
 from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.embeddings import DeterministicFakeEmbeddings
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
 from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
@@ -51,15 +52,23 @@ class ModelFactory:
 
     @staticmethod
     def get_embedding_model(userDesiredModel:str):
-        # TODO: Does not make sense to be in mock mode and call this.
         if os.getenv("LLM_MODE") == "mock":
-            return 
+            # Deterministic: identical text ALWAYS produces the identical vector,
+            # so retrieval behavior is reproducible and assertable in tests.
+            # size=768 matches nomic-embed-text's dimension, so mock and live
+            # rows share the same pgvector column schema.
+            return DeterministicFakeEmbeddings(size=768)
 
         # Fallback normalized to the compose *service* name (matches get_chat_model);
         # in practice OLLAMA_BASE_URL is always set by docker-compose.
         base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
-        res = TryGetOllamaEmbeddingModel("nomic-embed-text", base_url)
+        # (was hardcoded to "nomic-embed-text", ignoring this method's parameter)
+        res = TryGetOllamaEmbeddingModel(userDesiredModel, base_url)
+        if not res:
+            # Fail LOUDLY at startup: silently continuing would fill pgvector
+            # with garbage or crash on the first embed call mid-request.
+            raise RuntimeError(f"Could not ensure embedding model '{userDesiredModel}' is available in Ollama.")
 
         embeddings = OllamaEmbeddings(
             model=userDesiredModel,

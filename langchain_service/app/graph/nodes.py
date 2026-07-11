@@ -1,6 +1,6 @@
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from app.models.factory import ModelFactory
-from app.rag.Ingestion import FindSemanticlyClosestElement
+from app.rag.vector_store import vector_store
 from app.graph.state import ChatState
 from app.prompts.MyPromptTemplates import PromptFactory
 
@@ -10,7 +10,7 @@ def policy_check_node(state: ChatState) -> dict:
     user_msg = state["messages"][-1].content
 
     #perform RAG on system for company policy based on intenal documents
-    policy_chunks = FindSemanticlyClosestElement(user_msg, k=2)
+    policy_chunks = vector_store.find_similar(user_msg, k=2)
     policy_text = "\n\n".join(d.page_content for d in policy_chunks)
 
     model = ModelFactory.get_chat_model(state["desired_model"])
@@ -31,7 +31,7 @@ def policy_check_node(state: ChatState) -> dict:
 
 def retrieve_node(state: ChatState) -> dict:
     usr_msg = state["messages"][-1].content
-    chunks = FindSemanticlyClosestElement(usr_msg, k=4)
+    chunks = vector_store.find_similar(usr_msg, k=4)
     return {"retrieved_chunks": chunks}
 
 def blocked_node(state: ChatState) -> dict:

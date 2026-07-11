@@ -316,6 +316,35 @@ One thing to be aware of: SDK-style csproj files auto-compile every `.cs` under 
 
 Verification: `py_compile` passes on the touched Python files; grep shows zero `_old` references left in `langchain_service/app/` or `server/controllers/`.
 
+### [AI — 2026_07_11_00_02] Step 3 complete — RAG layer rebuilt
+
+**What changed:**
+
+- **3a** New `app/rag/vector_store.py`: `VectorStoreManager` with explicit `initialize()` (no module-level side effects — importing it never touches the network; the old file computed `mode` and the connection string at import time, which is why mock-checks were scattered everywhere). Module-level singleton `vector_store` shared statelessly across requests. Misuse before init raises a clear RuntimeError. Host now env-configurable (`POSTGRES_HOST`, default = compose service name `pgvector-service`).
+- **3b** `ModelFactory.get_embedding_model` returns `DeterministicFakeEmbeddings(size=768)` in mock mode — `768` deliberately matches nomic-embed-text's dimension so mock and live rows share one pgvector column schema. All mock-mode early-returns in the RAG path are gone: **pgvector now runs for real in mock mode**. Also fixed two latent bugs in the live path: the method ignored its own parameter (hardcoded `"nomic-embed-text"`), and a failed model pull was silently ignored (now raises at startup rather than corrupting the store mid-request).
+- **3c** `app/rag/seed_documents.py` holds the seed docs (data only; fixed the `testingexplosive` typo). `Ingestion.py` is now a thin orchestrator: `initialize()` + `add_documents_idempotent(SEED_DOCUMENTS)`. IDs are `sha256(page_content)` passed to `add_documents(ids=...)` — langchain-postgres upserts on ID conflict, so N restarts = one row per document (risk item 1 from the plan: your row-count verification below is the empirical check on this).
+- **3d** `find_similar(message, k, score_threshold=None)` built on `similarity_search_with_score`. Threshold is opt-in and off by default (behavior unchanged) — it exists because a nearest neighbor *always* exists, even for garbage queries; "nearest" ≠ "near".
+- **Design addition beyond plan sketch:** per-mode collections (`company_policies_mock` / `company_policies_live`) — both modes share the pgdata volume, and fake-embedding rows must never be candidates in a live similarity search.
+- Callers updated: `OrchestrationLogic.py` and `nodes.py` now use `vector_store.find_similar(...)`. Original `Ingestion.py` (with your comment-questions) preserved at `old_implementations/Ingestion_v1.py`.
+
+**Answers to the questions in your old Ingestion.py comments:**
+
+1. *"I need to investigate what PGVector is doing"* — `PGVector(...)` builds a SQLAlchemy engine for the connection string, ensures two tables exist (`langchain_pg_collection` — one row per collection name; `langchain_pg_embedding` — one row per document: id, embedding vector, document text, JSONB metadata, collection FK), and registers your embedding model so `add_documents` embeds text before INSERT and `similarity_search` embeds the query before the distance query.
+2. *"we need to block erroneous retrievals... minimum matching closeness"* — that's exactly `score_threshold`. PGVector scores are cosine *distance* (lower = closer), so the guard keeps `distance <= threshold`.
+3. *"how would we do this outside the LC ecosystem... talk to pgvector itself"* — yes, directly in SQL. pgvector adds a `vector` column type and distance operators; the whole retrieval is: `SELECT document FROM langchain_pg_embedding ORDER BY embedding <=> '[...query vector...]' LIMIT 4;` where `<=>` is cosine distance (`<->` L2, `<#>` negative inner product). LangChain's contribution is only: embed the query, build this SQL, map rows to `Document` objects. Worth doing once by hand from the pgvector container to demystify it — good interview material.
+
+**Verification:** `py_compile` clean on all touched files; grep confirms no `FindSemanticlyClosestElement` or `pgvector_service` references remain. Runtime checks for you (acceptance criterion 4):
+
+```
+./build.sh --mode mock
+docker exec -it pgvector_service psql -U admin -d vectordb -c "SELECT count(*) FROM langchain_pg_embedding;"   # expect 2
+docker restart langchain_service   # re-runs ingestion
+docker exec -it pgvector_service psql -U admin -d vectordb -c "SELECT count(*) FROM langchain_pg_embedding;"   # STILL 2 = idempotent
+curl -X POST localhost:5001/test/langchain/chatnosecurityrag -H "Content-Type: application/json" -d '{"user_message":"can I use scripting tools?"}'   # mock: should now execute a REAL pgvector similarity search
+```
+
+If the second count differs from the first, risk item 1 fired (add_documents not upserting on this version) — report the number and I'll switch to delete-then-add in a follow-up.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
