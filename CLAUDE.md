@@ -43,28 +43,32 @@ This folder will contain one single file which are used to capture the state of 
 
 Documents in this folder will be for implementation plans which the AI will create for themselves to be able to reviewed by Timothy, and then with permission from Timothy followed though step by step. 
 
-These documents will have multiple stages. Within each stage, a dynamic conversation will take place. The way it will work is that each markdown will appended in a chronological order. There will be a discussion between Timothy and the AI to communicate between each other and come to an eventually conclusion. 
+These documents will have multiple stages. Within each stage, a dynamic conversation will take place. The way it will work is that each markdown will appended in a chronological order. There will be a discussion between Timothy and the AI to communicate between each other and come to an eventually conclusion. Then the next stage will begin.
 
-Then the next stage will upon up and there can be another back and forth conversation.
+## Stage 1 (Design Documentation)
 
-## Stage 1 (Discussion)
+Timothy outlines the goals for this implementation plan. 
 
-Stage 1 will be a dynamic conversation between Timothy and the AI agent. Discussions will take place in describing the feature desired to be implemented, potential issues, technical difficulties, architecture designs and considerations, 
+## Stage 2 (Discussion)
 
-## Stage 2 (Implementation Planning)
+Stage 2 will be a dynamic conversation between Timothy and the AI agent. Discussions will take place in describing the feature desired to be implemented, potential issues, technical difficulties, architecture designs and considerations, and anything else which should be discussed.
 
-Stage 2 will be where the AI takes the conversation and direction described in Stage 1, and creates a full detailed implementation plan. This will be a step by step 
+## Stage 3 (Implementation Planning)
 
-### Stage 2 Discussion Subsection
+Stage 3 will be where the AI takes the conversation and direction described in Stage 2, and creates a full detailed implementation plan. This will be a step by step explanation as to what the AI is planning on doing, how it plans to accomplish it, and everything broken down into sub-steps. This way when we eventually reach stage 4, it will be easy for Timothy to give permission for steps at a time and verify.
+
+### Stage 3 Discussion Subsection
 
 This subsection will be where the dynamic conversation takes place. This will be another chronological discussion where Timothy and the AI discuss the Implementation Plan developed by the AI. 
 
 As this conversation goes back and forth, the AI will make changes to the Implementation Plan. (Notice that this means that the implementation plan will be dynamic and not a chronological timeline.)
 
-## Stage 3 (Implementation)
+## Stage 4 (Implementation)
 
-Stage 3 will begin once Stage 2 has been agreed upon. 
+Stage 4 will begin once Stage 3 has been agreed upon. This stage will consist of Timothy giving step by step permissions for the ai to implement each of the steps which it had outlined in the Stage 3. 
 
-## Stage 4 (Final Results, Testing, Verficiation)
+This will also be a chronological discussion where the AI gives a summary for each of the steps which it attempted to do. The things which were changed, any problems or unexpected issues which arose, and the state of the system at at this point.
 
-Once
+## Stage 5 (Final Results, Testing, Verficiation)
+
+Once the implementation has been fully finished, it needs to be tested and verified. This stage will be the location for verification documentation.
