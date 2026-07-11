@@ -1,0 +1,7 @@
+# Keep the build context (and image) lean — COPY . . honors this list.
+.venv/
+__pycache__/
+**/__pycache__/
+old_implementations/
+tests/
+.pytest_cache/

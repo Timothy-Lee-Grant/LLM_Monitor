@@ -382,6 +382,40 @@ cd langchain_service && LLM_MODE=mock python -m pytest tests/test_registry.py -v
 
 All four registry pipelines are now real. Flask routes for the graph pipelines don't exist yet — that's Step 6, which is also where `/v1/chat/completions` stops being a stub.
 
+### [AI — 2026_07_11_00_49] Step 6 complete — API layer rebuilt on the registry
+
+**What changed:**
+
+- **6a** `FlaskServer.py` fully rewritten (v1 preserved at `old_implementations/FlaskServer_v1.py`). The four canonical routes (`/chat/basic`, `/chat/rag`, `/graph/basic`, `/graph/rag`) are generated from one `PIPELINE_ROUTES` mapping — each is a shim: validate → `ChatRequest` → registry dispatch → contract JSON. Error mapping per CONTRACTS.md §3 via Flask errorhandlers: `UnknownPipelineError`→404, `RuntimeError` (ModelFactory upstream failures)→502, anything else→500 with a generic message on the wire and the full traceback in logs only.
+- Adopted the Flask **application-factory pattern**: `IntializeFlaskEndpoints()` → `create_app()`. This is the standard Flask shape — tests construct a fresh app per test, and WSGI servers import it from `wsgi.py`. (Also quietly retires the `Intialize` typo.)
+- **6b** `/v1/models` is now generated from the registry (`llm-monitor.<pipeline_id>` × 4). `/v1/chat/completions` is real: model id → pipeline, last user-role message → `user_message`, pipeline response wrapped in a proper `chat.completion` object. **The hardcoded stub is dead.**
+- **6c** `/healthz` returns `{"status": "ok", "mode": ...}`. The old `/` hello route is gone (healthz is its professional replacement).
+- **6d** Runtime rebuilt: `python:3.11-slim`, gunicorn (2 workers). Process model worth understanding — `entrypoint.sh` runs ingestion exactly ONCE before gunicorn forks; then each worker imports `wsgi.py`, which calls `vector_store.initialize()` per worker (each forked process needs its OWN connection pool — pools must never be shared across forks). `create_app()` itself never touches the DB, so unit tests need no containers. `main.py` remains as the documented local-dev entry. Also: answered the old dockerfile TODO (uvicorn is ASGI, for async frameworks; Flask is WSGI → gunicorn is its production server), and added `.dockerignore` (`.venv/` alone was silently bloating every image build via `COPY . .`).
+- `requirements.txt`: + gunicorn (pinning happens in Step 9).
+
+**Breaking changes to note:**
+1. Old routes `/test/langchain/chatnosecurity[rag]` are GONE — replaced by the CONTRACTS.md §6 routes. Update any saved curls.
+2. The transitional `user_requested_model` field is dropped; the contract name is `requested_model`.
+
+**Known risk (flagged in plan, now concrete):** OpenWebUI sends `stream: true` by default; we return a complete JSON body regardless. If OpenWebUI's UI won't render non-streamed completions, the quick fix is wrapping the same response as a single SSE chunk — say the word if chat output doesn't appear in Step 8 testing.
+
+**Verification (for you):**
+
+```
+./build.sh --mode mock
+curl localhost:5001/healthz
+for p in chat/basic chat/rag graph/basic graph/rag; do
+  curl -s -X POST localhost:5001/$p -H "Content-Type: application/json" -d '{"user_message":"can I use scripting tools?"}'; echo; done
+curl localhost:5001/v1/models
+curl -s -X POST localhost:5001/v1/chat/completions -H "Content-Type: application/json" \
+  -d '{"model":"llm-monitor.graph-rag","messages":[{"role":"user","content":"hello"}]}'
+curl -s -X POST localhost:5001/chat/basic -H "Content-Type: application/json" -d '{}'            # expect contract-shaped 400
+curl -s -X POST localhost:5001/v1/chat/completions -H "Content-Type: application/json" \
+  -d '{"model":"llm-monitor.nope","messages":[{"role":"user","content":"hi"}]}'                   # expect contract-shaped 404
+```
+
+This is acceptance criterion 1 in full (all 4 endpoints, 200 + contract JSON, mock mode). Next: Step 7 (YARP) unlocks criterion 2.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
