@@ -48,7 +48,12 @@ I don't know
 
 3. Acceptance criteria
 
-I'll think more on this.
+(1) `./build.sh --mode mock` responds with all containers healthy, all 4 test endpoints return 200 with valid contract JSON; 
+(2) same via dotnet gateway routes; 
+(3) live mode: RAG endpoint response demonstrably uses ingested document content; 
+(4) re-running ingestion twice yields no duplicate rows in pgvector; 
+(5) OpenWebUI chat round-trips through the real pipeline (no hardcoded stub); 
+(6) pytest suite covering contract shapes passes in CI.
 
 4. Non-goals
 
@@ -103,6 +108,21 @@ The overall shape is sound and industry-standard: gateway → orchestration serv
 Answer inline or in chat and I'll fold your decisions into the next entry.
 
 ---
+
+Yes, I read over your assessment and it sounds correct. 
+
+**Q1** I wanted to put YARP into this project to be able to signal to Microsoft that I would be a good canditate and have experience working with their systems. I was thinking that YARP could be a rate limiter, authentication, etc. I don't know if this is the right way to think about it, but this was my logic.
+
+**Q2** I like your idea.
+
+**q3** Sounds good, but does this assume that all of those will be going to the langchain_service? Will we have 4 (or I guess 5) more that correspond to going to the dotnet server to be routed though the authentication and telemetry gathering in the future?
+
+**q4** Yes, I definately want to be able to have a fully mock path, as you described and suggested.
+
+**q5** How will we handle the situations in the future where we have multiple users attempting to connect to the same pipeline? Or we need to upgrade a pipeline to add a new feature? Or if I want to add something like photo parsing? Is your idea scalable in these dimensions?
+
+**q6** I like it and have updated my acceptance criteria section.
+
 
 ## Stage 3 (Implementation Planning)
 
