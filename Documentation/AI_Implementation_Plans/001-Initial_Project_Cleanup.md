@@ -123,6 +123,37 @@ Yes, I read over your assessment and it sounds correct.
 
 **q6** I like it and have updated my acceptance criteria section.
 
+---
+
+### [AI — 2026_07_10_23_13] Reply: YARP confirmed, endpoint topology, pipeline scalability
+
+**Q1 (YARP) — your logic is exactly right.** YARP is Microsoft's own reverse-proxy library, built as ASP.NET Core middleware, which means the gateway becomes: `request → telemetry middleware → (future: auth middleware) → (future: rate-limiter middleware) → YARP forwarder → langchain_service`. Rate limiting and auth aren't *inside* YARP — they're standard ASP.NET middleware (`AddRateLimiter`, `AddAuthentication`) that sit in front of the proxy step, which is precisely the mental model you described. This is also the honest resume story: "built an API gateway with YARP, custom telemetry middleware, with extension points for auth and rate limiting." **Decision: option (a), true YARP proxy.** Your existing `TelemetryMiddleware` survives unchanged. `LlmController` gets retired (or kept only as a non-routed reference).
+
+**Q3 (endpoint topology) — good catch, and here's the cleaner framing: the 4 "test" and 4 "real" endpoints are the same 4 endpoints, reached via two network paths.** We do not write 8 handlers. The langchain_service defines 4 canonical routes (+ the OpenWebUI ones):
+
+```
+langchain_service (port 5000 internal):
+  POST /chat/basic          POST /graph/basic
+  POST /chat/rag            POST /graph/rag
+  GET  /v1/models           POST /v1/chat/completions
+
+Test path (dev only):   host:5001 → langchain_service directly
+                        (works because compose maps 5001:5000)
+Real path:              host:5000 → dotnet gateway → telemetry middleware
+                        → YARP forwards /api/llm/{**rest} → langchain_service/{rest}
+```
+
+So `POST host:5000/api/llm/chat/rag` and `POST host:5001/chat/rag` hit the identical handler — one goes through the gateway (telemetry, future auth), one bypasses it. When you eventually want to lock the system down, you delete the `5001:5000` port mapping from compose and the "test path" ceases to exist without touching any code. This satisfies your Stage 1 requirement ("langchain_service should not receive outside communications... except for testing") as a *configuration* choice, not a code fork.
+
+**Q5 (pipeline scalability) — three separate concerns, three separate mechanisms:**
+
+1. *Multiple users, same pipeline.* Compiled chains and graphs are **stateless, reusable objects** — we build each pipeline once at startup, and every request is an independent `.invoke()` carrying its own state dict. Two users invoking the same graph concurrently never touch each other's data, the same way two calls to a pure function don't. Per-request concurrency is handled by the server layer (gunicorn workers). Later, when you add memory, per-user state lives in the checkpointer keyed by `thread_id` — the pipeline object itself still stays shared and stateless. This is the standard production pattern.
+2. *Upgrading a pipeline.* This is what the **registry pattern** (your model-id → pipeline dict) buys us. Each pipeline has a string id (`"chat-basic"`, `"agent-rag"`). Upgrading = registering `"agent-rag-v2"` alongside v1; OpenWebUI's model list exposes both; you A/B them; you retire v1 by deleting one registry line. No endpoint changes, no client changes.
+3. *New capabilities (e.g., photo parsing).* Two insertion points, both already planned: a new **node** in an existing graph (if it's a step in a flow — e.g., "if message contains image, parse it, put description in state, continue"), or a new **registry entry** (if it's a new flow entirely). The contract is the only thing that needs future-proofing: we'll define `user_message` today but keep the request shape extensible (a future `attachments` field is additive, not breaking). Designing the v1 contract so additions don't break existing clients is the real scalability discipline here — and it's a non-goal to *implement* photo parsing now.
+
+**Where we stand:** Q1 decided (YARP proxy), Q2 agreed (snake_case contract, single doc), Q3 clarified above (confirm you're happy with "same endpoints, two paths"), Q4 decided (full mock RAG path), Q5 answered above, Q6 locked into Stage 1. If Q3's topology and Q5's answers sit right with you, I consider Stage 2 converged and I'll write the full Stage 3 implementation plan on your go.
+
+---
 
 ## Stage 3 (Implementation Planning)
 
