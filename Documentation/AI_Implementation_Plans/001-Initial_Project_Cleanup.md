@@ -530,3 +530,36 @@ Verified here: bash syntax, the JSON-assert helper against a real contract body,
 - OpenWebUI `stream: true`: if chat renders no output despite 200s, add the single-chunk SSE wrapper (Step 6 watch-item).
 - pgvector upsert semantics (plan risk 1): confirmed or refuted by criterion 4's 2 → 2 check.
 - Score threshold for retrieval quality is implemented but disabled (`score_threshold=None`) — tuning belongs to the evaluation-harness roadmap item, with real metrics instead of guesses.
+
+### Found Issues and Discussion
+
+#### Timothy's Response
+
+1. The build was failing the unit testing.
+```
+Run python -m pytest -v
+ImportError while loading conftest '/home/runner/work/LLM_Monitor/LLM_Monitor/langchain_service/conftest.py'.
+conftest.py:15: in <module>
+    from app.api.FlaskServer import create_app
+app/api/FlaskServer.py:20: in <module>
+    import app.orchestration.pipelines  # noqa: F401 — importing registers all pipelines
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+app/orchestration/pipelines.py:16: in <module>
+    from app.models.factory import ModelFactory
+app/models/factory.py:5: in <module>
+    from langchain_core.embeddings import DeterministicFakeEmbeddings
+E   ImportError: cannot import name 'DeterministicFakeEmbeddings' from 'langchain_core.embeddings' (/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/langchain_core/embeddings/__init__.py)
+Error: Process completed with exit code 4.
+```
+
+I looked at the documentation online and saw that the correct way to call it is
+
+```
+from langchain_core.embeddings import DeterministicFakeEmbedding
+
+embed = DeterministicFakeEmbedding(size=100)
+```
+
+So I changed the names in langchain_service/app/models/factory.py to conform to this.
+
+This is actually quite a confusing thing and I am not sure that it will even compile (or run I guess in Python's case) because I am attempting to call DeterministicFakeEmbedding but importing DeterministicFakeEmbeddings.

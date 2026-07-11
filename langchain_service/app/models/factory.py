@@ -2,7 +2,7 @@ import os
 import random
 from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.embeddings import DeterministicFakeEmbeddings
+from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage
 from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
