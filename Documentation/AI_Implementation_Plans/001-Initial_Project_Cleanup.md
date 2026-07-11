@@ -281,7 +281,13 @@ Not Gotten To Yet
 
 ## Stage 4 (Implementation)
 
-Not Gotten To Yet
+### [AI — 2026_07_10_23_25] Step 1 complete — CONTRACTS.md created
+
+Created `CONTRACTS.md` at repo root. Contents as planned: snake_case wire convention (with the C# `JsonNamingPolicy.SnakeCaseLower` mapping rule, answering the naming-convention question from your old controller comments), canonical request/success/error shapes, an error-code table mapped to HTTP statuses, the 4 pipeline registry ids plus the `llm-monitor.<pipeline_id>` OpenAI model-id mapping rule, the OpenAI-compatible surface (streaming explicitly deferred), and the two-access-path topology table including the "delete the 5001 mapping = production lockdown" note.
+
+Additions beyond the plan sketch (flagging for transparency): a reserved-future-fields list (`attachments`, `thread_id`, `options`) so v1 extensibility is explicit, and a `/healthz` contract since Step 8's compose healthcheck depends on it.
+
+No code touched. Awaiting your review of CONTRACTS.md and permission for Step 2.
 
 ## Stage 5 (Final Results, Testing, Verficiation)
 
