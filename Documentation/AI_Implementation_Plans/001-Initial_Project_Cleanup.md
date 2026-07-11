@@ -58,7 +58,51 @@ I'll think more on this.
 
 ## Stage 2 (Discussion)
 
-About to start.
+---
+
+### [AI — 2026_07_10_19_50] Opening entry: current-state findings and discussion questions
+
+Timothy, I investigated the full codebase before writing this. First, concrete facts about the current state so our discussion is grounded in reality rather than memory. Then, the decisions I need from you.
+
+#### A. Verified breakages (why the service is unstable)
+
+These are not opinions — the refactor of prompts into `PromptFactory` left the rest of the codebase pointing at symbols that no longer exist:
+
+1. **`app/models/factory.py` cannot import.** Line: `from app.prompts.MyPromptTemplates import MockChatTypeDictionary, number_of_chat_types`. Neither name exists anymore (the mock data moved to `mock_prompts.py` as `MOCK_RESPONSES` etc.). Since everything imports the factory, the entire service fails at startup. This is the root "nothing works" bug.
+2. **`OrchestrationLogic.py` calls `GetHappyEncouragingAssistentRagPrompt()`** — replaced by `PromptFactory.get_assistant_prompt()`. NameError at request time.
+3. **`graph/nodes.py` imports `GetPolicyViolationCheckerPrompt`** — same problem. Also, it's used as `GetPolicyViolationCheckerPrompt | model` without being called (it was a function; now it needs to be `PromptFactory.get_policy_checker_prompt() | model`).
+4. **`graph/build_graph.py`**: `from langgraph.prebuilt import ToolNode, tool_condition` — the real name is `tools_condition`. Also `build_graph()` is incomplete (adds 2 nodes, no edges, no compile, returns `None`); only `build_graph_old()` is complete.
+5. **Prompt variable mismatch**: `get_assistant_prompt()` requires `{context}`, but the non-RAG worker invokes with only `{"user_message": ...}` → KeyError. Also the template has `("placeholder", "{message}")` but nothing ever passes `message`.
+6. **`/v1/chat/completions` is a hardcoded stub** — OpenWebUI "works" only in the sense that it receives a fake canned string. It never touches the orchestration layer.
+7. **Dotnet `LlmController`**: reads `OLLAMA_BASE_URL` (never set for `dotnet_server` in compose → null), posts to `/api/chat` (doesn't exist on Flask), media type is `"/application/json"` (invalid — leading slash), and returns the raw `HttpResponseMessage` object serialized instead of reading the body. Four independent bugs; this path has never worked end-to-end.
+8. **There is no YARP.** The plan says "my YARP dotnet server," but `Program.cs` is a plain controller app — no YARP package, no reverse-proxy config. This matters for question 1 below.
+9. **`RunIdempotentRagIngestion` is not idempotent.** `add_documents` with no IDs inserts duplicates on every startup. Your pgvector collection is accumulating copies of the same two documents. Fix: deterministic IDs (e.g., hash of content) so re-ingestion upserts.
+10. Minor but worth fixing while we're in there: `ChatState.disired_model` typo (it's load-bearing — nodes read `state["disired_model"]`), `main.py` runs ingestion *after* creating the app with `debug=True` (the Flask reloader imports the module twice → double ingestion), and Flask's dev server isn't a production server (gunicorn is the standard fix).
+
+#### B. My read on the architecture (answering your "is my architecture good?" worry)
+
+The overall shape is sound and industry-standard: gateway → orchestration service → model runtime + vector DB, with mock/live profiles. That's genuinely the right decomposition. Your instability isn't an architecture problem — it's the absence of two things professionals lean on: **contracts** (so a rename in one file can't silently break five others) and **tests/CI that run the service** (so breakage is caught at commit time, not demo time). This implementation should prioritize those two, because they're what makes the refactor *stay* fixed.
+
+#### C. Decisions I need from you before Stage 3
+
+**Q1 — What is the dotnet server, really?** Two different products:
+   - (a) **True YARP reverse proxy**: transparent forwarding, routes defined in `appsettings.json`, no DTOs, no controller for the chat path. Telemetry middleware still works. Less code, matches "API gateway" on a resume.
+   - (b) **Controller-based orchestrator** (what exists now): receives, validates, transforms, forwards via HttpClient. More code, more control, but it duplicates the contract and is where 4 of your bugs live.
+   - My recommendation: (a) for the chat routes, keeping a controller only where the gateway adds real logic later (auth, policy). But it's your call and it changes the plan significantly.
+
+**Q2 — The contract.** I propose one canonical JSON shape at every HTTP boundary, snake_case on the wire (configure `System.Text.Json` naming policy in C# rather than renaming C# properties — this answers the comment-question in your controller about naming conventions across languages). Request: `{user_id, user_message, requested_model}`. Response: `{status, response, metadata{...}}`. Documented in one markdown file that both services link to. Agree, or do you want to design it together in more detail first?
+
+**Q3 — Endpoint layout.** Plan says 4 test endpoints. I propose: `/test/chat/basic`, `/test/chat/rag`, `/test/graph/basic`, `/test/graph/rag`, plus the real `/v1/chat/completions` for OpenWebUI. For scalable dispatch, your own commented-out idea in `FlaskServer.py` (dict of model-id → orchestration function) is the right pattern — OpenWebUI's model picker then selects the pipeline. Confirm?
+
+**Q4 — Mock mode and RAG.** Currently mock mode makes `FindSemanticlyClosestElement` return `[]`, so the RAG path is untestable without Ollama. Do you want a mock embedding model (deterministic fake vectors) so the *full* RAG path — pgvector included — runs in mock mode? I'd argue yes: it makes the RAG contract testable in CI. Cost: a bit more mock code.
+
+**Q5 — LangGraph scope.** For "scalable growth," I'd structure the graph as: entry → (rag?) → agent → respond, with the policy-check node deferred (your non-goals exclude policy blocking). The graph and plain-chain paths would share the same `ModelFactory`/`PromptFactory`/retriever components. The checkpointer stays out of scope for this cleanup. Agree?
+
+**Q6 — Acceptance criteria** (you left this open; here's a strawman): (1) `./build.sh --mode mock` → all containers healthy, all 4 test endpoints return 200 with valid contract JSON; (2) same via dotnet gateway routes; (3) live mode: RAG endpoint response demonstrably uses ingested document content; (4) re-running ingestion twice yields no duplicate rows in pgvector; (5) OpenWebUI chat round-trips through the real pipeline (no hardcoded stub); (6) pytest suite covering contract shapes passes in CI.
+
+Answer inline or in chat and I'll fold your decisions into the next entry.
+
+---
 
 ## Stage 3 (Implementation Planning)
 
