@@ -345,6 +345,23 @@ curl -X POST localhost:5001/test/langchain/chatnosecurityrag -H "Content-Type: a
 
 If the second count differs from the first, risk item 1 fired (add_documents not upserting on this version) — report the number and I'll switch to delete-then-add in a follow-up.
 
+### [AI — 2026_07_11_00_18] Step 4 complete — pipeline registry + orchestration refactor
+
+**What changed:**
+
+- **4a** Three new modules in `app/orchestration/`:
+  - `contracts.py` — dataclasses mirroring CONTRACTS.md §1/§2 (`ChatRequest`, `ChatResponse`, `ChatMetadata`, with `to_dict()` producing the exact wire shape). Dataclasses instead of raw dicts so a typo'd field name is an AttributeError at dev time, not a silent contract violation on the wire.
+  - `registry.py` — `PIPELINES` dict, `register()` (rejects duplicate ids), `get_pipeline()` raising `UnknownPipelineError` (the API layer maps it to 404/`unknown_pipeline` in Step 6).
+  - `pipelines.py` — registers all 4 CONTRACTS.md §4 ids on import. `chat-basic` and `chat-rag` share one `_run_assistant_chain(request, pipeline_id, k)` body (k=None means no retrieval) — your old workers had ~80% duplicated code; now the diff between the two pipelines is literally one argument. Metadata is fully populated: pipeline_id, model_used, retrieved_sources, latency_ms.
+- **Deviation from plan, flagged:** `graph-basic`/`graph-rag` are registered as *honest placeholders* that raise `NotImplementedError` rather than silently delegating to the chain implementations. Registry is complete (4 ids, so `/v1/models` generation in Step 6 is correct), but nothing pretends to be a graph that isn't one. Step 5 swaps in the compiled graphs.
+- **4b** `FlaskServer.py`: the two existing routes now dispatch through `get_pipeline(...)` and return the CONTRACTS.md §2 shape. **Breaking change to note:** response body changed from `{"status", "message_response"}` to the contract shape — if you had anything scripted against the old shape, it needs the new field names. Route *paths* are unchanged until Step 6. The request parser accepts both `requested_model` (contract name) and your old `user_requested_model` (transitional; dropped in Step 6).
+- **4c** `OrchestrationLogic.py` retired to `old_implementations/OrchestrationLogic_v1.py` and removed from `app/` (file deletion approved by Timothy via Cowork permission prompt).
+- **Verification artifact:** `tests/test_registry.py` — registry integrity (exactly 4 ids), unknown-id error path, chat-basic full contract-shape assertions, graph placeholders raise. Run: `cd langchain_service && LLM_MODE=mock python -m pytest tests/test_registry.py -v`.
+
+**Housekeeping observation (no action taken):** `__pycache__/` directories with stale compiled bytecode (including the deleted `OrchestrationLogic`) exist inside the repo tree — worth adding `__pycache__/` to `.gitignore` if not already covered, and untracking any committed `.pyc` files. Flagging rather than fixing since it touches git state.
+
+**Verification status:** `py_compile` clean on all new/touched files; grep shows no remaining `OrchestrationLogic` or worker-function references in `app/` (only the stale `__pycache__` noted above). Runtime: the same two curl commands from Step 2/3 now return the full contract JSON (status/response/metadata) — plus `tests/test_registry.py` above.
+
 ## Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

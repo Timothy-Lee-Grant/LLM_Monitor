@@ -1,3 +1,5 @@
+# Retired from app/orchestration/OrchestrationLogic.py during plan 001 Step 4 (2026_07_11). Replaced by pipelines.py + registry.py. Kept for reference only.
+
 from app.models.factory import ModelFactory
 from app.rag.vector_store import vector_store
 from app.prompts.MyPromptTemplates import PromptFactory
