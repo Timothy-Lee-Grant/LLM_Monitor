@@ -1,0 +1,35 @@
+# OpenTelemetry Collector config (plan 002 Step 1).
+#
+# The collector is the "mail-sorting office" (concepts doc 018 §3): services
+# push OTLP here and know nothing about backends. Swapping Jaeger for anything
+# else is a change to THIS file only — app code never moves.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # Batching decouples app latency from export latency: spans buffer briefly
+  # and ship in groups instead of one network call per span.
+  batch:
+
+exporters:
+  # Jaeger ingests OTLP natively on its own 4317.
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true   # local docker network only
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]
+  # NOTE: no metrics pipeline on purpose — metrics use the PULL model
+  # (Prometheus scrapes /metrics on each service). Two transports, two
+  # concepts, deliberately visible side by side.

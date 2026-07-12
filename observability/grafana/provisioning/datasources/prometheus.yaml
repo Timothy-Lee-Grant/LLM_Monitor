@@ -1,0 +1,14 @@
+# Grafana datasource provisioning (plan 002 Step 1).
+# Provisioning = dashboards/datasources as versioned files instead of
+# click-configuration lost inside a volume. (The OpenWebUI persisted-config
+# lesson from plan 001 found-issue 3, applied proactively.)
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

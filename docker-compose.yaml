@@ -6,10 +6,11 @@ services:
     container_name: dotnet_server
     ports:
       - "5000:8080"
-    # YARP's default upstream (appsettings.json) already points at
-    # http://langchain_service:5000/. To retarget without a rebuild, uncomment:
-    # environment:
-    #   - ReverseProxy__Clusters__langchain__Destinations__primary__Address=http://langchain_service:5000/
+    environment:
+      - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}   # consumed from Step 2 on
+      # YARP's default upstream (appsettings.json) already points at
+      # http://langchain_service:5000/. To retarget without a rebuild, uncomment:
+      # - ReverseProxy__Clusters__langchain__Destinations__primary__Address=http://langchain_service:5000/
     depends_on:
       langchain_service:
         condition: service_healthy
@@ -34,6 +35,7 @@ services:
       - "5001:5000"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}   # consumed from Step 3 on
       - LLM_MODE=${LLM_MODE:-mock}
       - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
       - POSTGRES_USER=${POSTGRES_USER:-admin}
@@ -69,6 +71,61 @@ services:
     depends_on:
       - dotnet_server
 
+  # ---- observability stack (plan 002) ----------------------------------
+  # Opt-in via `./build.sh --obs` (compose profile "obs", same mechanism as
+  # "live"). Without the flag, none of these exist — the default system
+  # stays exactly as light as before.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel_collector
+    profiles: ["obs"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      # exposed to host so locally-run (non-docker) dev processes can export too
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    profiles: ["obs"]
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"   # trace UI: http://localhost:16686
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    profiles: ["obs"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"     # query UI: http://localhost:9090
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    profiles: ["obs"]
+    environment:
+      # local learning setup: no login wall (never do this outside localhost)
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"     # dashboards: http://localhost:3001 (3000 is OpenWebUI)
+    depends_on:
+      - prometheus
+
   pgvector-service:
     image: pgvector/pgvector:pg16
     container_name: pgvector_service
@@ -89,3 +146,5 @@ volumes:
   ollama_data:
   pgdata:
   openwebui_data:
+  prometheus_data:
+  grafana_data:

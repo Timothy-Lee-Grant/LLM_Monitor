@@ -1,0 +1,17 @@
+{
+  "__comment": "Placeholder dashboard (plan 002 Step 1). Step 4 replaces this with the real RED + AI-metrics dashboard once the /metrics endpoints exist. One panel is included so provisioning is verifiable end-to-end.",
+  "title": "LLM Monitor",
+  "uid": "llm-monitor-main",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Prometheus scrape targets up (placeholder — real dashboard arrives in Step 4)",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 },
+      "targets": [ { "expr": "up", "legendFormat": "{{job}}" } ]
+    }
+  ]
+}

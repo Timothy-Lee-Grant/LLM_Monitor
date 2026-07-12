@@ -242,7 +242,28 @@ Awaiting Timothy's review of Implementation Plan v1.
 
 # Stage 4 (Implementation)
 
-Not Gotten To Yet
+### [AI — 2026_07_12_16_28] Step 1 complete — observability infrastructure skeleton
+
+**What changed:**
+
+- **1a** Four services added to `docker-compose.yaml` under `profiles: ["obs"]` — `otel-collector` (OTLP in on 4317/4318, exports to Jaeger; ports exposed to host so non-docker dev processes can export too), `jaeger` all-in-one (UI :16686), `prometheus` (UI :9090, persistent volume), `grafana` (UI :3001 — 3000 is OpenWebUI; anonymous-admin enabled for local learning, with a "never outside localhost" comment). New volumes `prometheus_data`, `grafana_data`.
+- **1b** New `observability/` folder at repo root: `otel-collector-config.yaml` (receivers→batch→Jaeger; a comment marks the deliberate ABSENCE of a metrics pipeline — metrics are pull-model), `prometheus.yml` (scrapes both app services every 5s; targets will show DOWN until Steps 2/4 create the endpoints — expected and noted in the file), Grafana provisioning (datasource + dashboard provider as *versioned files* — the plan-001 found-issue-3 lesson applied proactively: no click-config trapped in volumes) and a placeholder dashboard with one `up` panel so provisioning is verifiable end-to-end before Step 4 builds the real one.
+- **1c** `build.sh`: `--obs` flag → adds `--profile obs` to both build and up (mirrors `live` mechanics), exports `OBSERVABILITY_ENABLED=true/false`, and prints the three UI URLs on startup. Compose passes `OBSERVABILITY_ENABLED` to both app services now (consumed starting Steps 2/3) so later steps don't touch compose again.
+
+**Verification (mine):** bash syntax clean; compose parses; profile isolation asserted programmatically — obs profile contains exactly the 4 new services, and the no-profile (default) set is exactly the plan-001 four. All YAML/JSON configs parse.
+
+**Verification (yours):**
+
+```
+./build.sh --mode mock            # control: identical container set to yesterday (criterion g)
+./build.sh --mode mock --obs      # 4 new containers join
+docker compose -p llm_monitor ps  # otel_collector, jaeger, prometheus, grafana present
+# Jaeger    http://localhost:16686  → loads, no traces yet (Step 2 provides the first)
+# Prometheus http://localhost:9090/targets → both targets DOWN (expected until Steps 2/4)
+# Grafana   http://localhost:3001  → "LLM Monitor" dashboard exists, placeholder panel
+```
+
+Awaiting your check and permission for Step 2 (gateway instrumentation — first real trace).
 
 # Stage 5 (Final Results, Testing, Verficiation)
 
