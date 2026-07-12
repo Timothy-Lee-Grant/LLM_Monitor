@@ -5,10 +5,17 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main]
-  
+
 jobs:
   python-tests:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        # The fix that makes this pipeline honest: dependencies and tests live in
+        # langchain_service/, not the repo root. The old workflow looked for
+        # requirements.txt at the root, found nothing, installed nothing, and
+        # "passed" by running a test that imported no application code.
+        working-directory: langchain_service
     steps:
       - name: Check out source code
         uses: actions/checkout@v4
@@ -16,32 +23,33 @@ jobs:
       - name: Set up python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.11'   # matches the runtime image (python:3.11-slim)
           cache: 'pip'
-        
-      - name: Install Dependencies
+          cache-dependency-path: langchain_service/requirements.txt
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest
+          pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run Pytest 
-        run: pytest
+      - name: Run pytest
+        env:
+          LLM_MODE: mock
+        run: python -m pytest -v
 
-  # csharp-tests:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout source code
-  #       uses: actions/checkout@v4
+  csharp-build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v4
 
-  #     - name: Set up .NET Core SDK
-  #       uses: actions/setup-detnet@v4
-  #       with:
-  #         dotnet-version: '11.0.x'
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4   # (old workflow had a 'setup-detnet' typo)
+        with:
+          dotnet-version: '11.0.x'
 
-  #     - name: Restore Dependencies
-  #       run: dotnet restore
+      - name: Build gateway
+        run: dotnet build server/server.csproj --configuration Release
 
-  #     - name: Run xUnit Tests
-  #       run: dotnet test --configuration Release -l trx
-      
+      - name: Run xUnit tests
+        run: dotnet test server.Tests/server.Tests.csproj --configuration Release

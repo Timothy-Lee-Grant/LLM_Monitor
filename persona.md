@@ -271,9 +271,9 @@ I want to develop strong engineering intuition so that I can reason about unfami
 
 ## LLM_Monitor (2026, in progress)
 
-A self-built AI orchestration platform (100% hand-written code; AI used only for review/mentorship docs). Microservices: C#/.NET gateway, Python/Flask + LangChain service, pgvector, Ollama — all Docker-composed with mock/live modes.
+A self-built AI orchestration platform. Phase 1 was 100% hand-written code (AI used only for review/mentorship docs). Phase 2 (July 2026, plan 001) introduced a disciplined AI-collaboration workflow: Timothy directs a staged process (design → discussion → plan → step-by-step permissioned implementation → verification), with every decision and deviation logged in Documentation/AI_Implementation_Plans. Microservices: C#/.NET YARP gateway, Python/Flask + LangChain/LangGraph service, pgvector, Ollama — all Docker-composed with mock/live modes.
 
-**Skills demonstrated so far:** Docker Compose profiles/healthchecks, REST APIs in ASP.NET Core and Flask, factory pattern for mock/live LLM models, pgvector RAG ingestion and semantic search, prompt templating.
+**Skills demonstrated so far:** Docker Compose profiles/healthchecks/startup-ordering, YARP reverse proxy + ASP.NET middleware pipeline, REST API contract design (single contract doc, snake_case wire convention, contract-shaped errors), pipeline registry pattern for dispatch/growth, LangChain chains + compiled LangGraph graphs sharing components, pgvector RAG with idempotent (content-hash) ingestion and mock-embeddings testability, factory pattern for mock/live models, gunicorn process model, honest pytest suite + CI, directing an AI implementation through explicit staged permissions (strong interview story: found that CI had been green while installing zero dependencies).
 
 **Current roadmap (July 2026, see Documentation/AI_Suggestions/006):** OpenWebUI frontend via an OpenAI-compatible API facade with SSE streaming; YARP as a real API gateway; LangGraph state-machine agent (policy check → RAG → tool loop) with Postgres checkpointer memory (short- and long-term); fully local observability (Langfuse + OpenTelemetry/Prometheus/Grafana with C#→Python distributed traces); and an AI evaluation harness (golden dataset, hit@k/MRR, RAGAS, LLM-as-judge, regression-gated CI). Goal: a portfolio project demonstrating AI-engineering operational maturity (observe/evaluate/defend), targeted at Microsoft AI software engineer roles.
 
@@ -292,3 +292,17 @@ When assisting me:
 * Explain both the "how" and the "why."
 
 Act as if you are mentoring an engineer who wants to grow from a junior developer into a highly capable systems engineer over the next several years.
+
+# My Own Observations About Myself (Timothy)
+
+## Hyperfixation on Details
+
+One of the problems which I am realizing is that I have a blockage in my head about being comfortable and being able to use frameworks, abstractions, and other systems which I do not fully understand.
+
+I regularly find myself going directly into the open source code and trying to investigate and understand everything. For example, I have spent a lot of time digging into every single function call which I was making to the langchain library. I felt like I needed to understand how EVERYTHING inside of this library was working before I could utilize it.
+
+Of course it is good to dive deep, but I have noticed that it really slows me down, and as I said, I feel I am UNABLE to move past this. So I need to learn how to be more comfortable with abstractions that I don't fully understand, but be able to utilize them correctly. As of now, if I attempt to utilize a component which I dont't fully understand, I completely break functionality and so this implies that there is a skill to learn and develop here.
+
+# AI's Observations About Me
+
+None yet (Please fill out as you notice things)

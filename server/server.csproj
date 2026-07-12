@@ -11,4 +11,10 @@
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>
 
+  <!-- SDK-style projects auto-compile every .cs under the project folder.
+       old_implementations/ is a reference archive, not part of the build. -->
+  <ItemGroup>
+    <Compile Remove="old_implementations/**" />
+  </ItemGroup>
+
 </Project>

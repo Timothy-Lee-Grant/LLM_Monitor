@@ -5,7 +5,6 @@ This project is to help me (Timothy Grant) learn important concepts to become a 
 My persona.md file tells you who I am, and my goals.
 
 # Rules 
-- Do not change ANY of the actual code
 - Never change the git history! Only add new commits to the history, never go back and change the history of old commits!
 - You are allowed to run the code and test it out. You can start up docker containers and run scripts. Just not allowed to make any changes to the code or scripts. But running things in a way that will not change it, to get a better understanding, and querying the system, is acceptable.
 - Feel free to create a new markdown file in any of the folders within the Documentation folder.
@@ -39,3 +38,37 @@ This document allows me to get help with my system and get it working, but still
 ## Project_Captures
 
 This folder will contain one single file which are used to capture the state of the project at the time requested. This document should only be appended onto by logging a new state. Don't append to this document unless the user specificlly asks for it. When the user ask to add documents to all folders in documentation, they do not mean this one unless specificlly said to do this targeted file. This document should be mainly for concuption of other llm models. The point of this file is to be able to capture and articulate the state of the project, design difficulties I am having, find stories which might be useful to me in interviews. highlight things which I should high light. I will copy and paste this file into my other projects to help me track projects which I am doing and help me prepare for interviews. I am targeting Microsoft as a software engineer.
+
+## AI_Implementation_Plans
+
+Documents in this folder will be for implementation plans which the AI will create for themselves to be able to reviewed by Timothy, and then with permission from Timothy followed though step by step. 
+
+These documents will have multiple stages. Within each stage, a dynamic conversation will take place. The way it will work is that each markdown will appended in a chronological order. There will be a discussion between Timothy and the AI to communicate between each other and come to an eventually conclusion. Then the next stage will begin.
+
+## Stage 1 (Design Documentation)
+
+Timothy outlines the goals for this implementation plan. 
+
+## Stage 2 (Discussion)
+
+Stage 2 will be a dynamic conversation between Timothy and the AI agent. Discussions will take place in describing the feature desired to be implemented, potential issues, technical difficulties, architecture designs and considerations, and anything else which should be discussed.
+
+## Stage 3 (Implementation Planning)
+
+Stage 3 will be where the AI takes the conversation and direction described in Stage 2, and creates a full detailed implementation plan. This will be a step by step explanation as to what the AI is planning on doing, how it plans to accomplish it, and everything broken down into sub-steps. This way when we eventually reach stage 4, it will be easy for Timothy to give permission for steps at a time and verify.
+
+### Stage 3 Discussion Subsection
+
+This subsection will be where the dynamic conversation takes place. This will be another chronological discussion where Timothy and the AI discuss the Implementation Plan developed by the AI. 
+
+As this conversation goes back and forth, the AI will make changes to the Implementation Plan. (Notice that this means that the implementation plan will be dynamic and not a chronological timeline.)
+
+## Stage 4 (Implementation)
+
+Stage 4 will begin once Stage 3 has been agreed upon. This stage will consist of Timothy giving step by step permissions for the ai to implement each of the steps which it had outlined in the Stage 3. 
+
+This will also be a chronological discussion where the AI gives a summary for each of the steps which it attempted to do. The things which were changed, any problems or unexpected issues which arose, and the state of the system at at this point.
+
+## Stage 5 (Final Results, Testing, Verficiation)
+
+Once the implementation has been fully finished, it needs to be tested and verified. This stage will be the location for verification documentation.

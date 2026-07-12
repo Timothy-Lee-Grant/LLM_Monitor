@@ -50,7 +50,6 @@ def TryGetOllamaEmbeddingModel(desired_model:str, base_ollama_url:str) -> bool:
     if os.getenv("LLM_MODE") == "mock":
         return True
     
-    #desired_model = "nomic-embed-text"
     if desired_model in knownPulledOllamaEmbeddingModels:
         return True
     

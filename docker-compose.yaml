@@ -1,13 +1,18 @@
 services:
   dotnet_server:
-    build: 
+    build:
       context: ./server
       dockerfile: dockerfile
     container_name: dotnet_server
     ports:
       - "5000:8080"
+    # YARP's default upstream (appsettings.json) already points at
+    # http://langchain_service:5000/. To retarget without a rebuild, uncomment:
+    # environment:
+    #   - ReverseProxy__Clusters__langchain__Destinations__primary__Address=http://langchain_service:5000/
     depends_on:
-      - langchain_service
+      langchain_service:
+        condition: service_healthy
 
   ollama:
     image: ollama/ollama:latest
@@ -17,18 +22,6 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-  
-  # ollama-pull-model:
-  #   image: curlimages/curl:latest
-  #   container_name: ollama_pull_model
-  #   profiles: ["live"]
-  #   environment:
-  #     - OLLAMA_BASE_URL=http://ollama:11434
-  #   volumes:
-  #     - ./pull-models.sh:/sys/init/pull-models.sh:ro
-  #   depends_on:
-  #     - ollama
-  #   entrypoint: ["/bin/sh", "sys/init/pull-models.sh"]
 
   langchain_service:
     build: 
@@ -36,6 +29,8 @@ services:
       dockerfile: dockerfile
     container_name: langchain_service
     ports:
+      # DEV/TEST path only (CONTRACTS.md §6): direct access bypassing the gateway.
+      # Deleting this mapping is the production lockdown switch — no code changes.
       - "5001:5000"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -47,6 +42,13 @@ services:
     depends_on:
       pgvector-service:
         condition: service_healthy
+    # python:3.11-slim ships neither curl nor wget, so the probe is stdlib python.
+    # start_period covers image boot + one-time RAG ingestion in the entrypoint.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/healthz')"]
+      interval: 5s
+      retries: 12
+      start_period: 20s
 
   openwebui:
     image: ghcr.io/open-webui/open-webui:main
@@ -54,18 +56,18 @@ services:
     ports:
       - "3000:8080"
     environment:
-      #- OPENAI_API_BASE_URL=http://dotnet_server:8080/v1
-      - OPENAI_API_BASE_URL=http://langchain_service:5000/v1
+      # OpenWebUI now enters through the GATEWAY (acceptance criterion 5):
+      # every chat transits telemetry -> YARP -> langchain_service.
+      - OPENAI_API_BASE_URL=http://dotnet_server:8080/v1
       - OPENAI_API_KEY=dummy-key-not-checked
       - ENABLE_OLLAMA_API=false
       - WEBUI_AUTH=false
       - RAG_EMBEDDING_ENGINE=ollama
-      - HF_HUB_OFFLINE=1 
+      - HF_HUB_OFFLINE=1
     volumes:
       - openwebui_data:/app/backend/data
     depends_on:
-      #- dotnet_server
-      - langchain_service
+      - dotnet_server
 
   pgvector-service:
     image: pgvector/pgvector:pg16

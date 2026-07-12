@@ -1,13 +1,11 @@
-
-
-
-
-
-
-from app.api.FlaskServer import IntializeFlaskEndpoints
+# LOCAL DEV entry point only. The container runs entrypoint.sh -> gunicorn (wsgi.py).
+from app.api.FlaskServer import create_app
 from app.rag.Ingestion import RunIdempotentRagIngestion
 
 if __name__ == "__main__":
-    app = IntializeFlaskEndpoints()
+    # Ingestion runs BEFORE the server accepts traffic: a request must never race
+    # against a half-populated vector store. (Also initializes the vector store.)
     RunIdempotentRagIngestion()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+
+    app = create_app()
+    app.run(host="0.0.0.0", port=5000)
