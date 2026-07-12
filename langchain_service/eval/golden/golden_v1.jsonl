@@ -1,0 +1,16 @@
+# Golden dataset v1 (plan 002 Step 6). One JSON object per line; lines starting with '#' are ignored by the loader.
+# Schema: {"id", "collection", "question", "expected_doc_ids", "reference_answer", "notes"}
+#   - expected_doc_ids are the sha256 content-hash ids from plan 001 (stable because ids are pure functions of content).
+#   - collection is LOGICAL ("company_policies"); the eval runner maps it to the physical per-mode collection.
+#
+# Three worked examples below (g001-g003). Copy their shape for your own rows.
+{"id": "g001", "collection": "company_policies", "question": "Am I allowed to use local scripting tools for automation at work?", "expected_doc_ids": ["6b6a741cbdf77fcff7e0356cdbf9219fd0c76352d896cbb87604b21f50cf68c5"], "reference_answer": "Yes — employees may use local scripting tools for local automation, as long as no proprietary source code leaves company assets.", "notes": "Direct phrasing overlap with security_policy_v2.md. Easiest retrieval case — if this misses, retrieval is badly broken."}
+{"id": "g002", "collection": "company_policies", "question": "What happens if someone builds or tests an explosive device on site?", "expected_doc_ids": ["47cd3c6241eade81c09404d7f2f084399de53a8370b25a751aa00ed01c258a8f"], "reference_answer": "It is strictly prohibited and results in immediate termination.", "notes": "Direct match to hr_conduct_v1.md."}
+{"id": "g003", "collection": "company_policies", "question": "Can I write little Python scripts on my work laptop to speed up repetitive tasks?", "expected_doc_ids": ["6b6a741cbdf77fcff7e0356cdbf9219fd0c76352d896cbb87604b21f50cf68c5"], "reference_answer": "Yes — local scripting for local automation is permitted, provided proprietary source code never leaves company assets.", "notes": "PARAPHRASE case: almost no shared keywords with the policy text ('Python', 'laptop', 'repetitive'). Tests semantic retrieval rather than keyword luck. Expect this one to score lower than g001 in live mode — that gap is signal, not noise."}
+#
+# TIMOTHY: add your 15-30 items below this line. Guidance:
+#   - Vary difficulty: direct phrasing, paraphrases, questions needing BOTH docs, and a few where the
+#     honest reference_answer is "the policies do not cover this" (expected_doc_ids may still list the
+#     nearest doc — retrieval returns SOMETHING; whether the answer should USE it is the judge's job).
+#   - Grow this file from real failures: every bad answer you see in OpenWebUI becomes a row here.
+#   - New docs in seed_documents.py -> get their ids from: python -c "from app.rag.vector_store import VectorStoreManager; from app.rag.seed_documents import SEED_DOCUMENTS; [print(VectorStoreManager.deterministic_id(d), d.metadata['source']) for d in SEED_DOCUMENTS]"

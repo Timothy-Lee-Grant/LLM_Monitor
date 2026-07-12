@@ -388,6 +388,24 @@ cd langchain_service && python -m pytest -v         # 27 green
 
 **Known-unknowns flagged:** exact Langfuse env-var names drift between image versions — if web/worker crash-loop, `docker logs langfuse_web` will name the missing var; diff against their reference compose (link in the compose comment) and fix in ONE place thanks to the anchor. The SDK import path (`langfuse.langchain`) is current-generation; if the installed SDK is older the import error will say so and the fallback is the legacy `langfuse.callback` path — one-line change in `observability.py`.
 
+### [AI — 2026_07_12_18_26] Step 6 complete — golden dataset, rubric, calibration set (your input slots are open)
+
+**What changed (new `langchain_service/eval/` package):**
+
+- **6a** `eval/golden/golden_v1.jsonl` — 3 worked examples (g001–g003), each `expected_doc_ids` verified against the *actual* sha256 of the live seed docs. g003 is the deliberately hard one: a paraphrase with almost zero keyword overlap ("Python", "laptop", "repetitive" vs the policy's "scripting tools", "automation") — it tests *semantic* retrieval, and its live-mode score being lower than g001's is signal, not noise. Format decision documented in the loader: JSONL plus `#`-comment lines, so your authoring guidance lives next to the data (strict JSONL forbids comments; the deviation is owned and explained).
+- **6b** `eval/rubric.md` — faithfulness 1–5, judge-facing, with the two rules that matter most spelled out: *outside knowledge being true does not make a claim faithful*, and *refusing to invent scores 5*. Two few-shot anchors included; machine-parsed output format (`<score>: <rationale>`) matches your existing judge prompt's contract. `eval/calibration.jsonl` — held-out human-scored rows, with the held-out-ness explained in the header (calibration rows must NEVER appear as few-shot anchors, or you're measuring memorization, not agreement).
+- **6c** `eval/dataset.py` — shared loader/validators used by both the CI tests and the Step 7/8 runners (one definition of "valid row"). 3 new tests, the sharpest being `test_golden_expected_ids_reference_real_seed_docs`: if seed content ever changes, its hash changes, and CI names exactly which golden rows now point at a ghost. **Suite is 30.**
+
+**YOUR input slots (this step is half yours — the plan's stub-and-slot promise):**
+
+1. `golden_v1.jsonl` → add 15–30 rows below the marked line (copy a worked example; difficulty guidance + the id-generation command are in the file header).
+2. `calibration.jsonl` → replace c001's score/rationale with YOUR judgment (or delete it) and add 5–10 rows scored by you — ideally from real live-mode outputs.
+3. `rubric.md` → the `<!-- TIMOTHY -->` block: your own anchors and domain rules; bump the rubric version when you edit.
+
+None of this blocks Step 7 (the retrieval runner works against the 3 worked examples), but the eval only becomes *yours* when the human rows are yours.
+
+**Verification (mine):** validators executed against the real files — 3 golden + 1 calibration rows load, validate, and every expected id matches a real seed hash. **Yours:** `cd langchain_service && python -m pytest tests/test_eval_datasets.py -v` (3 green), then try breaking it on purpose: corrupt one expected_doc_id character in golden_v1.jsonl, rerun, watch the test name the row — that's your dataset's fire alarm.
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
