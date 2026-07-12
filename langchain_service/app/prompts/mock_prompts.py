@@ -9,7 +9,10 @@ MOCK_POLICY_VIOLATION_CHECKER = [
 ]
 
 MOCK_LLM_JUDGE = [
-    "5: Perfect alignment with source material."
+    "5: Perfect alignment with source material.",
+    # Added plan 002 Step 8: a second verdict (with a colon inside the rationale)
+    # so the plumbing tier exercises the parser's first-colon-only split too.
+    "2: Unsupported claims present: the response invents details absent from the context.",
 ]
 
 MOCK_RESPONSES = {

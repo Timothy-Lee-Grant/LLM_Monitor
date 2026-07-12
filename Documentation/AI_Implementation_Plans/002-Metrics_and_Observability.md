@@ -437,6 +437,32 @@ docker exec langchain_service python -m eval.eval_retrieval --tier quality --sav
 
 Step 8 (judge eval + calibration report) reuses this runner's shape.
 
+### [AI — 2026_07_12_19_08] Step 8 complete — LLM-as-judge faithfulness eval + calibration report
+
+**What changed:**
+
+- **8a** Your `get_llm_judge_prompt()` stub (written months ago) is now live, upgraded to **inject the rubric as a variable** — `eval/rubric.md` stays the single source of scoring truth; editing the rubric never touches code (it bumps the rubric version instead). Prompt version bumped: `judge.faithfulness@2` (the `@1` stub is preserved in git). `eval/eval_judge.py`: golden rows → answers → judge → `parse_verdict` (first-colon-only split, the plan-001 `partition` idiom — rationales containing colons survive) → per-item scores, mean, parse-failure count, JSON report.
+- **8b** Plumbing tier judges *reference answers against expected docs* with `MockChatModel(response_pool=MOCK_LLM_JUDGE)` — zero containers, proving the loop: rubric loads → prompt renders → judge invoked → verdict parsed → aggregation computed. Your mock judge pool gained a second verdict containing a colon in its rationale, so the parser's edge case is exercised on every CI run. Parse failures in plumbing exit 1 (gate-lite). Quality tier gets real answers from the actual `chat-rag` pipeline (in-process, so its generations also land in Langfuse via the registry callbacks) and judges against the *retrieved* context — RAGAS-style faithfulness: grounding vs what was retrieved, not what should have been. `JUDGE_MODEL` env lets the judge be a stronger model than the serving one.
+- **8c** `--calibration` judges your `calibration.jsonl` rows and prints judge-vs-human agreement: exact-match rate + mean absolute difference. This is the A4 trust check — until agreement is decent on rows YOU scored, judge numbers are opinions, not measurements.
+- Langfuse push is best-effort by design: report JSON is ALWAYS the source of truth; the push tolerates SDK API drift with a printed skip reason (flagged known-unknown, same class as the Step 5 import-path one).
+- 4 new tests (parser valid/garbage cases, agreement math hand-computed, plumbing loop end-to-end). **Suite is 39.**
+
+**Verification (mine):** parser + agreement math executed in-sandbox against hand-computed truths — pass; py_compile clean.
+
+**Verification (yours — acceptance criterion e):**
+
+```
+cd langchain_service && python -m pytest tests/test_eval_judge.py -v      # 4 green
+python -m eval.eval_judge --tier plumbing --calibration                   # loop green, meaningless scores, agreement vs c001
+# real judging (live mode, inside the container):
+./build.sh --mode live --obs
+docker exec langchain_service python -m eval.eval_judge --tier quality --calibration
+#   per-item faithfulness from a real model, calibration vs YOUR scores (fill calibration.jsonl first
+#   for this to mean anything), scores visible in Langfuse if the push succeeded
+```
+
+Interesting live-mode reading: if g003's answer scores lower than g001's, check whether it's a retrieval miss (Step 7's numbers) or a generation problem — being able to SPLIT that blame is exactly what this two-eval design was for. Step 9 (CI wiring + verification script + Stage 5 scaffold) closes the plan.
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
