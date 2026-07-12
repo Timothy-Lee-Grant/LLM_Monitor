@@ -50,14 +50,33 @@ class VectorStoreManager:
         )
 
     def add_documents_idempotent(self, docs: list[Document]) -> list[str]:
-        """Add documents with deterministic IDs so re-ingestion upserts instead of duplicating.
+        """Add documents with deterministic IDs, embedding ONLY what's genuinely new.
 
-        id = sha256(page_content): same content -> same id -> ON CONFLICT update,
-        N restarts still yield exactly one row per unique document.
+        id = sha256(page_content), which buys two guarantees:
+        - idempotency: same content -> same id -> re-runs can never duplicate rows;
+        - safe skipping: if an id already exists, its content is BY DEFINITION
+          identical, so we don't re-embed it (embedding is the expensive step —
+          one get_by_ids SELECT replaces N embedding computations).
+          (Timothy's found-issue #2, plan 001.)
+
+        Known, deliberate limitation: an EDITED document gets a new id, so its
+        old row remains as an orphan. Delta-sync with deletion (LangChain
+        RecordManager / indexing API) belongs to the future document-ingestion
+        plan — see plan 001 Found Issues discussion.
+
+        Returns the ids that were actually added (empty list = everything
+        was already present).
         """
+        store = self._require_initialized()
         ids = [self.deterministic_id(d) for d in docs]
-        self._require_initialized().add_documents(docs, ids=ids)
-        return ids
+
+        existing_ids = {doc.id for doc in store.get_by_ids(ids)}
+        missing = [(doc_id, doc) for doc_id, doc in zip(ids, docs) if doc_id not in existing_ids]
+
+        if missing:
+            store.add_documents([doc for _, doc in missing], ids=[doc_id for doc_id, _ in missing])
+
+        return [doc_id for doc_id, _ in missing]
 
     def find_similar(self, message: str, k: int = 4, score_threshold: float | None = None) -> list[Document]:
         """Return up to k most similar documents to `message`.

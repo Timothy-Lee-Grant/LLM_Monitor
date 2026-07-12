@@ -598,3 +598,15 @@ Two things you should know are *deliberately not solved* by this (so we scope th
 2. **Startup ingestion doesn't scale past a small corpus.** When the PDFs arrive, ingestion should become its own job (loader → chunker → embedder → delta-sync), triggered on demand or on a schedule — not something that blocks container startup. That's a proper future implementation plan ("document ingestion pipeline"), and it's also where your loader/chunker TODO from the original `Ingestion.py` naturally lands.
 
 *Recommendation:* I implement the skip-existing optimization now as a plan-001 addendum (small, in scope for "ensure RAG saves documents correctly", immediately testable — ingestion twice, second run embeds zero docs), and we log orphan-cleanup + offline ingestion as the seed of a future plan. Your call — say go and it's a 15-minute change with a test.
+
+#### [AI — 2026_07_11_20_34] Issue 2 implemented — skip-existing ingestion (approved by Timothy)
+
+**Changes:**
+
+- `app/rag/vector_store.py` → `add_documents_idempotent` now: compute ids → one `get_by_ids` SELECT → filter to missing → `add_documents` only those. Returns the *added* ids (empty list = everything already present). The safety argument is in the docstring: id = sha256(content), so "id exists" *proves* "content identical" — skipping can never lose data. The orphan-on-edit limitation and its future home (RecordManager / document-ingestion plan) are documented at the decision site, not just in this log.
+- `app/rag/Ingestion.py` → startup log now reports `N added, M already present (skipped, no re-embedding)` — so you can SEE the optimization working in `docker logs langchain_service` on every restart (first boot: `2 added, 0 skipped`; every boot after: `0 added, 2 skipped`).
+- `tests/test_ingestion_ids.py` → three new tests using a `_FakeStore` stub that counts `add_documents` calls: first run adds all; second run adds nothing **and never invokes the embedding path** (`add_calls` stays at 1 — that's the compute saving, asserted); partial overlap adds exactly the one new doc. Suite is now 23 tests.
+
+**Verification:** `py_compile` clean; the exact algorithm was simulated end-to-end in my sandbox (first=2 added, second=0 added with no embed call, partial=1 added — pass). For you: `python -m pytest tests/test_ingestion_ids.py -v`, then rebuild and check the ingestion log line across two restarts. Note criterion 4's row-count check in `acceptance_check.sh` still applies unchanged (2 → 2) — this change makes the same invariant hold *cheaper*.
+
+**Contract note:** `add_documents_idempotent`'s return value changed meaning (all ids → added ids). Sole caller (`Ingestion.py`) updated; the method's docstring documents the semantics. No wire contract impact.

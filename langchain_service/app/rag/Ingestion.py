@@ -12,6 +12,10 @@ from app.rag.seed_documents import SEED_DOCUMENTS
 
 def RunIdempotentRagIngestion() -> bool:
     vector_store.initialize()
-    ids = vector_store.add_documents_idempotent(SEED_DOCUMENTS)
-    print(f"RAG ingestion complete: {len(ids)} seed documents upserted into '{vector_store.collection_name}'.")
+    added_ids = vector_store.add_documents_idempotent(SEED_DOCUMENTS)
+    skipped = len(SEED_DOCUMENTS) - len(added_ids)
+    print(
+        f"RAG ingestion complete: {len(added_ids)} added, {skipped} already present "
+        f"(skipped, no re-embedding) in '{vector_store.collection_name}'."
+    )
     return True
