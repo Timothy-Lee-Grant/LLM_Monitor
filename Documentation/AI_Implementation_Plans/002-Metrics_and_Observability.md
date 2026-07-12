@@ -265,6 +265,33 @@ docker compose -p llm_monitor ps  # otel_collector, jaeger, prometheus, grafana 
 
 Awaiting your check and permission for Step 2 (gateway instrumentation — first real trace).
 
+### [AI — 2026_07_12_16_45] Step 2 complete — gateway instrumented (traces pushed, metrics pulled)
+
+**What changed:**
+
+- **2a** `server.csproj`: five OTel packages added with **floating versions** (`*`, and `*-*` for the historically-prerelease Prometheus exporter) — deliberate, same no-guessed-pins policy as Python; the resolved versions get locked in Step 9. My sandbox has no dotnet SDK or NuGet access, so `dotnet restore` on your machine is the moment of truth for resolution (plan risk 3).
+- **2b** `Program.cs`: everything gated on `OBSERVABILITY_ENABLED` (from build.sh `--obs`); when false, nothing registers. When true: resource name `gateway` (that's the Jaeger service-dropdown label), tracing = AspNetCore instrumentation (root span per inbound request) + HttpClient instrumentation + OTLP push to the collector (standard `OTEL_EXPORTER_OTLP_ENDPOINT` env wins over the `http://otel-collector:4317` default). The comment on `AddHttpClientInstrumentation()` marks the conceptual keystone: YARP forwards through HttpClient, so that instrumentation is ALSO what injects `traceparent` on the proxied hop — the single header that makes Step 3's cross-service trace possible. Metrics = AspNetCore + HttpClient instruments exposed via Prometheus exporter at `GET /metrics` (pull model, mapped only when enabled).
+- **2c** `TelemetryMiddleware` now logs `trace_id` sourced from `Activity.Current` — the log↔trace join: grep a slow request in logs, paste its trace_id into Jaeger, land on the span tree. (Bonus concept in the comment: `Activity` is .NET's built-in span type; ASP.NET creates one per request even without OTel — OTel is "just" the exporter of it.)
+
+**Verification (mine):** static checks — usings present, gate applied to all three registration points, correct ordering (services before `Build()`, endpoint mapping after), csproj package count. Compile + runtime are yours (no dotnet here).
+
+**Verification (yours):**
+
+```
+cd server && dotnet build                       # resolution + compile (risk 3 check)
+./build.sh --mode mock --obs
+curl -s localhost:5000/api/llm/chat/basic -X POST -H "Content-Type: application/json" -d '{"user_message":"hi"}'
+# Jaeger http://localhost:16686 → service "gateway" → Find Traces → one trace,
+#   spans: inbound POST + outbound HttpClient call to langchain (still a gateway-only
+#   trace — langchain joins it in Step 3)
+curl -s localhost:5000/metrics | head -30       # prometheus text format, http_server_* metrics
+# Prometheus http://localhost:9090/targets → "gateway" target now UP (langchain still DOWN until Step 4)
+docker logs dotnet_server | grep trace_id       # telemetry lines now carry trace_id=...
+./build.sh --mode mock                          # control: no /metrics, no exporter errors in logs (criterion g)
+```
+
+If `dotnet restore` fails on any floating package (net11.0 compat), paste the error — fallback is pinning that one package to its latest net-compatible major.
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
