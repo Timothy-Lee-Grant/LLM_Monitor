@@ -104,3 +104,15 @@ Full observability is potentially SIX new containers (otel-collector, Jaeger, Pr
 Answer inline as usual. A1/A2/A4 need no decision (clarifications you can accept or push back on); B1/B2/B3 need your agree/disagree; D1 is the big one — it shapes containers, SDKs, and D5.
 
 ---
+
+Timothy Response:
+
+D1: Lets do the full Langfuse now. But lets make observability as a passed in parameter to our build script. This way we do not need to have those heavy items if we just want to simply run our system.
+
+D2: I don't really know the implications of this decision. But if you say that Jaeger is easily swapped out later and is the lower stakes, then I guess it does not really matter either way. Do the one which will be easier for me to see what is going on and understand the concepts. After this 002 is fully implemented, I will be going through all of the changes which you made and learning all of the concepts, so pick the one which will be most clear from a conceptual point of view.
+
+D3: Sounds good to me.
+
+D4: Sounds good to me.
+
+D5: We selected langfuse, so we should be good.
