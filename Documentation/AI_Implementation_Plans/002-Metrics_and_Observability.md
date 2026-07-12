@@ -116,3 +116,134 @@ D3: Sounds good to me.
 D4: Sounds good to me.
 
 D5: We selected langfuse, so we should be good.
+
+---
+
+### [AI — 2026_07_12_16_05] Stage 2 closing summary
+
+Decisions locked: **D1** full Langfuse now, with ALL observability containers behind an opt-in flag (`./build.sh --obs`, implemented as a compose profile exactly like `live`) so the default system stays light — good call, and it becomes acceptance criterion (g) below. **D2** Jaeger — chosen for conceptual clarity per your instruction: its UI is nothing but the trace/span-tree concept, ideal for learning. **D3** JSONL golden set keyed by sha256 ids. **D4** two-tier judge (mock plumbing in CI, live scores nightly/manual). **D5** per-node spans via Langfuse callbacks. B1–B3 stand as agreed (no stubs for tools/memory; collection-parameterized eval harness; `thread_id`-shaped field in every generation record for your future implicit-feedback idea). Stage 2 converged.
+
+
+# Stage 3 (Implementation Planning)
+
+### [AI — 2026_07_12_16_05] Implementation Plan v1
+
+**Ordering principle (same as plan 001):** every step leaves the repo runnable and independently verifiable; `./build.sh --mode mock` with NO `--obs` flag must behave identically to today after every single step.
+
+**The target topology:**
+
+```
+                                          ┌─────────── obs profile (only with --obs) ───────────┐
+gateway ──OTLP traces──────────────────►  │  otel-collector ──► Jaeger (trace UI :16686)         │
+   │  └─ /metrics (pull) ◄────────────────│── Prometheus (:9090) ──► Grafana (:3001, dashboard)  │
+langchain ──OTLP traces────────────────►  │       ▲                                              │
+   │  └─ /metrics (pull) ◄────────────────│───────┘                                              │
+   └──Langfuse SDK (push)──────────────►  │  Langfuse (:3002) ── langfuse db                     │
+                                          └──────────────────────────────────────────────────────┘
+```
+
+Two transport models on display (deliberately, for the concepts): traces/generations are PUSHED by services; metrics are PULLED by Prometheus scraping `/metrics`. The collector is the indirection point for traces so backends are swappable.
+
+---
+
+#### Step 1 — Observability infrastructure skeleton (`obs` profile)
+
+1a. `docker-compose.yaml`: new services under `profiles: ["obs"]` — `otel-collector` (config: OTLP in, Jaeger out), `jaeger` (all-in-one), `prometheus` (scrape config for both app services), `grafana` (provisioned Prometheus datasource + auto-loaded dashboard JSON; port 3001 to avoid OpenWebUI's 3000).
+1b. Config files in a new `observability/` folder at repo root: `otel-collector-config.yaml`, `prometheus.yml`, `grafana/provisioning/*`.
+1c. `build.sh`: `--obs` flag → adds `--profile obs` to the compose invocations (mirrors the existing `live` mechanics).
+
+Verification: `./build.sh --mode mock --obs` → 4 new containers healthy; Jaeger/Prometheus/Grafana UIs load. Without `--obs`: identical container set to today.
+
+#### Step 2 — Gateway (C#) instrumentation
+
+2a. Packages: `OpenTelemetry.Extensions.Hosting`, `OpenTelemetry.Instrumentation.AspNetCore`, `OpenTelemetry.Instrumentation.Http`, OTLP exporter, Prometheus AspNetCore exporter.
+2b. `Program.cs`: tracing (root span per request, automatic `traceparent` injection on the proxied hop — YARP forwards via HttpClient, which the Http instrumentation covers) + `/metrics` endpoint. All gated on `OBSERVABILITY_ENABLED` env (default false → zero overhead, no exporter errors when collectors absent).
+2c. `TelemetryMiddleware` stays as the log pillar; its line gains the current `trace_id` so logs ↔ traces are joinable (the three pillars linked — a concept made concrete).
+
+Verification: with `--obs`, one curl through the gateway → gateway-only trace visible in Jaeger; `curl :5000/metrics` shows request counters.
+
+#### Step 3 — langchain_service (Python) tracing
+
+3a. Dependencies: `opentelemetry-sdk`, `-instrumentation-flask`, `-exporter-otlp`. `observability.py` module: `init_observability()` called from `wsgi.py`/`main.py`, no-op unless `OBSERVABILITY_ENABLED`.
+3b. Flask auto-instrumentation continues the gateway's `traceparent` (extract → same trace id).
+3c. Manual spans at the seams: `pipeline.dispatch` span wrapping the registry handler call (attributes: `llm.pipeline_id`, `llm.model`, `llm.request.user_id`, `session.thread_id` when present) and `rag.retrieve` span inside `find_similar` (attributes: k, result count, top score).
+
+Verification (the headline): one curl to `:5000/api/llm/chat/rag` → ONE trace in Jaeger containing gateway spans AND Flask/pipeline/retrieval spans under the same trace id. Acceptance criterion (a).
+
+#### Step 4 — Metrics + Grafana dashboard
+
+4a. `prometheus_client` in Python: request counter, error counter, duration histogram, token counters — all labeled by `pipeline_id` (bounded cardinality: 4 values; user_id explicitly NOT a label, per 018). `/metrics` on the Flask app.
+4b. Token source: `usage_metadata` from the model response when live (ChatOllama provides it); zeros in mock (honest, documented) — plumbing identical in both modes.
+4c. Grafana dashboard (provisioned JSON, versioned in `observability/`): RED row (rate, errors, p50/p95 duration by pipeline) + AI row (tokens/request, retrieval hit counts).
+
+Verification: 20-request loop script → dashboard panels populate; per-pipeline latency differences visible. Acceptance criterion (b).
+
+#### Step 5 — Langfuse (LLM-layer capture)
+
+5a. Compose (obs profile): Langfuse + its datastore. **Known risk, decided with your input during implementation:** current Langfuse v3 self-host wants ClickHouse+Redis+MinIO (heavy); fallback is pinning the v2 image (single container + Postgres — can share `pgvector-service` with a second database). I'll try v3-minimal first, present the container count, you choose.
+5b. Python SDK behind the same `OBSERVABILITY_ENABLED` gate: Langfuse LangChain callback handler passed into chain/graph invocations at the registry boundary (D5: per-node spans free), generation records carrying rendered prompt, retrieved chunk ids/sources, token counts, `trace_id` (link to Jaeger), and `thread_id` field (B3 future-proofing).
+5c. Prompt versioning seed (your §LLM-as-Judge worry): `PromptFactory` prompts get a `name@version` label recorded on every generation — when prompts evolve, scores stay attributable.
+
+Verification: OpenWebUI chat → generation in Langfuse UI showing full prompt + chunks, linked trace id matches Jaeger. Acceptance criterion (c).
+
+#### Step 6 — Golden dataset + human-input stubs
+
+6a. `langchain_service/eval/golden/golden_v1.jsonl` — schema `{id, collection, question, expected_doc_ids, reference_answer, notes}`; 3 worked examples by me; `<!-- TIMOTHY: ... -->`-marked slots for your 15–30.
+6b. `eval/rubric.md` (faithfulness 1–5 rubric, judge-facing) and `eval/calibration.jsonl` (held-out human-scored items — YOUR scores, slots marked).
+6c. Schema validator as a pytest (CI: malformed golden rows fail the build).
+
+Verification: pytest green; you can author rows by copying a worked example.
+
+#### Step 7 — Retrieval eval (`eval/eval_retrieval.py`)
+
+7a. Computes hit@k (k=1,3) and MRR per collection from golden set vs live `find_similar` results; outputs JSON report + console summary. ~60 lines, hand-rolled (A1: the understanding lives here).
+7b. Two tiers: `--tier plumbing` (mock embeddings — asserts determinism & code correctness, runs in CI via a new job step) and `--tier quality` (live embeddings, manual/nightly — real scores, baseline saved to `eval/baselines/`).
+7c. Regression gate: `--gate` flag compares against baseline with thresholds file; exits nonzero on drop.
+
+Verification: CI plumbing green; live run produces scores; **induced regression** (point golden set at wrong ids, or k=0) makes the gate FAIL — criterion (f), the fire-alarm test.
+
+#### Step 8 — Judge eval (`eval/eval_judge.py`)
+
+8a. Faithfulness scoring: golden-set questions → live RAG pipeline answers → judge prompt (your existing `get_llm_judge_prompt`, upgraded to the Step 6 rubric with structured output: score + cited evidence) → per-item scores + summary; scores pushed to Langfuse.
+8b. CI plumbing tier via `MOCK_LLM_JUDGE` pool (parses mock verdicts end-to-end without Ollama).
+8c. Judge calibration report: judge scores vs your `calibration.jsonl` scores, agreement summary printed (the A4 trust check).
+
+Verification: plumbing test green in CI; live run shows scores in Langfuse; calibration report runs against your filled-in examples.
+
+#### Step 9 — CI wiring, verification script, Stage 5 scaffold
+
+9a. `ci.yml`: eval-plumbing steps added to the python job (golden schema test, retrieval plumbing tier, judge plumbing tier) — all mock, no containers.
+9b. `scripts/observability_check.sh` (acceptance-pass style, like plan 001's): automates criteria (a)–(d) where scriptable, prints manual steps for (c)/(e).
+9c. Stage 5 scaffold with the criteria matrix.
+
+---
+
+#### Acceptance criteria (formalizing, since Stage 1 left them implicit)
+
+(a) One curl through the gateway → one trace in Jaeger with spans from BOTH services under the same trace id.
+(b) Grafana dashboard shows per-pipeline RED + token metrics after a 20-request load.
+(c) Every `/chat/rag` invocation records prompt + chunks + tokens in Langfuse, linked to its Jaeger trace id.
+(d) Retrieval eval outputs hit@1/hit@3/MRR: plumbing tier green in CI, quality tier produces a live baseline.
+(e) Judge eval produces per-item faithfulness scores + calibration agreement report.
+(f) An induced regression fails the eval gate (prove the alarm rings by starting a fire).
+(g) `./build.sh --mode mock` WITHOUT `--obs` is byte-for-byte today's container set, all 23 tests green, no observability overhead.
+
+#### Risks
+
+1. **Langfuse v3 self-host weight** (Step 5a) — decision point mid-implementation, v2-pin fallback ready.
+2. **Version pinning** — same policy as plan 001: no guessed pins; freeze from the working environment (and the plan-001 `requirements.lock` follow-up is still open — this plan adds deps, so we should close both together in Step 9).
+3. **C# OTel packages on net11.0** — verified only at your `dotnet build` (my sandbox has no SDK).
+4. **Token counts in mock mode are zeros** — documented, not hidden; live mode is the real measure.
+5. **Grafana dashboard JSON is fiddly** — budgeted as iterate-with-screenshots during Stage 4 rather than right-first-time.
+
+### Stage 3 Discussion Subsection
+
+Awaiting Timothy's review of Implementation Plan v1.
+
+# Stage 4 (Implementation)
+
+Not Gotten To Yet
+
+# Stage 5 (Final Results, Testing, Verficiation)
+
+Not Gotten To Yet
