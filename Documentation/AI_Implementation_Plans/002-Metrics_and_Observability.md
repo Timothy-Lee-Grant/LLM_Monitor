@@ -406,6 +406,37 @@ None of this blocks Step 7 (the retrieval runner works against the 3 worked exam
 
 **Verification (mine):** validators executed against the real files — 3 golden + 1 calibration rows load, validate, and every expected id matches a real seed hash. **Yours:** `cd langchain_service && python -m pytest tests/test_eval_datasets.py -v` (3 green), then try breaking it on purpose: corrupt one expected_doc_id character in golden_v1.jsonl, rerun, watch the test name the row — that's your dataset's fire alarm.
 
+### [AI — 2026_07_12_18_47] Step 7 complete — retrieval eval runner with regression gate
+
+**What changed:**
+
+- **7a** `eval/eval_retrieval.py` (~150 lines, no eval libraries): `hit_at_k` is 3 lines, `reciprocal_rank` is 6 — you can now explain both from memory, which was the point of hand-rolling (A1). Per-run JSON report to `eval/reports/` (worth adding to .gitignore — your call, git state is yours) plus console summary.
+- **7b** The two tiers from A2, now executable:
+  - `--tier plumbing` needs NO containers — it embeds seed docs + golden questions **in memory** with the same `DeterministicFakeEmbedding` as mock mode and ranks by hand-rolled cosine. Its printed scores are semantically meaningless *by design* (the console output says so every run); its promises are (1) the machinery is correct and (2) the output is bit-identical across runs — it self-checks determinism by retrieving twice and asserting equality. Any output change = code regression. This is what CI runs (wired in Step 9).
+  - `--tier quality` uses the real vector store; run it inside the container (`docker exec langchain_service python -m eval.eval_retrieval --tier quality`) since pgvector is deliberately not port-mapped to the host. Live mode = your first REAL retrieval numbers.
+- **7c** Gate: `--save-baseline` writes `eval/baselines/retrieval_<tier>.json` (committed — the baseline IS the quality contract), `--gate` compares against it via `eval/thresholds.json` and exits 1 on regression, 2 if no baseline exists. Tolerances differ per tier and the thresholds file explains why: plumbing = 0.0 (deterministic → any drop is a bug), quality = 0.05 (live embeddings wobble; tighten as the golden set matures).
+- 5 new tests: metrics against hand-computed truths (including the rank-2-with-k=1 miss case), plumbing tier end-to-end + determinism, gate detects a regression / passes at baseline / absorbs wobble within tolerance. **Suite is 35.**
+
+**Verification (mine):** metric functions and gate logic executed against hand-computed expectations in-sandbox (they're dependency-free) — all pass; thresholds JSON parses; py_compile clean.
+
+**Verification (yours — acceptance criteria d and f):**
+
+```
+cd langchain_service && python -m pytest tests/test_eval_retrieval.py -v      # 5 green
+python -m eval.eval_retrieval --tier plumbing --save-baseline                 # commit the baseline
+python -m eval.eval_retrieval --tier plumbing --gate                          # pass, tolerance 0.0
+# criterion (f) — start a fire, confirm the alarm:
+#   edit g001's expected_doc_ids to the WRONG hash (or reorder K_VALUES logic), then:
+python -m eval.eval_retrieval --tier plumbing --gate                          # MUST exit 1 with a named metric
+#   revert the fire.
+# real numbers (criterion d, quality tier):
+./build.sh --mode live
+docker exec langchain_service python -m eval.eval_retrieval --tier quality --save-baseline
+#   expect hit@1 = 1.0 on g001/g002 and the interesting question: does g003 (the paraphrase) rank its doc first?
+```
+
+Step 8 (judge eval + calibration report) reuses this runner's shape.
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
