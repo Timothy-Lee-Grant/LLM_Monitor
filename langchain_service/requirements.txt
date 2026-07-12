@@ -9,3 +9,9 @@ langchain-postgres
 pgvector
 psycopg[binary,pool]
 gunicorn
+
+# Observability (plan 002 Step 3) — API is mandatory (no-op spans when disabled);
+# SDK/exporter/instrumentation only activate via init_observability().
+opentelemetry-sdk
+opentelemetry-instrumentation-flask
+opentelemetry-exporter-otlp

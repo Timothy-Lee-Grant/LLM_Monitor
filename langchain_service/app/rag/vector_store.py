@@ -16,6 +16,7 @@ from langchain_postgres import PGVector
 from langchain_core.documents import Document
 
 from app.models.factory import ModelFactory
+from app.observability import get_tracer
 
 
 class VectorStoreManager:
@@ -86,10 +87,22 @@ class VectorStoreManager:
         PGVector returns cosine DISTANCE: lower = closer, so we keep docs with
         distance <= threshold. None disables the guard (current default).
         """
-        results = self._require_initialized().similarity_search_with_score(message, k=k)
-        if score_threshold is not None:
-            results = [(doc, score) for doc, score in results if score <= score_threshold]
-        return [doc for doc, _score in results]
+        # Span is a no-op unless observability is enabled (see app/observability.py).
+        # rag.top_score is the distance of the BEST hit — watching it across queries
+        # is the raw material for tuning score_threshold with data (plan 002 eval).
+        with get_tracer().start_as_current_span("rag.retrieve") as span:
+            span.set_attribute("rag.k", k)
+            span.set_attribute("rag.collection", self.collection_name or "uninitialized")
+
+            results = self._require_initialized().similarity_search_with_score(message, k=k)
+            if score_threshold is not None:
+                results = [(doc, score) for doc, score in results if score <= score_threshold]
+
+            span.set_attribute("rag.results", len(results))
+            if results:
+                span.set_attribute("rag.top_score", float(results[0][1]))
+
+            return [doc for doc, _score in results]
 
     @staticmethod
     def deterministic_id(doc: Document) -> str:

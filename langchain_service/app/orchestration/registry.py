@@ -8,9 +8,10 @@ The registry is the single dispatch point of the service:
 - Upgrades: register `foo-v2` beside `foo`, A/B them, delete one line to retire.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable
 
+from app.observability import get_tracer
 from app.orchestration.contracts import ChatRequest, ChatResponse
 
 
@@ -28,10 +29,32 @@ class Pipeline:
 PIPELINES: dict[str, Pipeline] = {}
 
 
+def _instrumented(pipeline_id: str, handler: Callable[[ChatRequest], ChatResponse]):
+    """Wrap a handler in a `pipeline.dispatch` span (plan 002 Step 3).
+
+    This is the "instrumentation attaches at the registry boundary" decision
+    made concrete: EVERY pipeline — current and future — is traced because
+    registration itself does the wrapping. No pipeline author ever thinks
+    about spans. When observability is disabled the span is a no-op
+    (see app/observability.py on the API/SDK split), so this wrapper is
+    always safe and always on.
+    """
+    def dispatch_with_span(request: ChatRequest) -> ChatResponse:
+        with get_tracer().start_as_current_span("pipeline.dispatch") as span:
+            span.set_attribute("llm.pipeline_id", pipeline_id)
+            span.set_attribute("llm.request.user_id", request.user_id)
+            response = handler(request)
+            span.set_attribute("llm.model_used", response.metadata.model_used)
+            span.set_attribute("llm.latency_ms", response.metadata.latency_ms)
+            span.set_attribute("rag.sources_count", len(response.metadata.retrieved_sources))
+            return response
+    return dispatch_with_span
+
+
 def register(pipeline: Pipeline) -> None:
     if pipeline.id in PIPELINES:
         raise ValueError(f"Duplicate pipeline id '{pipeline.id}' — ids must be unique.")
-    PIPELINES[pipeline.id] = pipeline
+    PIPELINES[pipeline.id] = replace(pipeline, handler=_instrumented(pipeline.id, pipeline.handler))
 
 
 def get_pipeline(pipeline_id: str) -> Pipeline:

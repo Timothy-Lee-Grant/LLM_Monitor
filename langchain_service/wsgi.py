@@ -11,6 +11,10 @@ Process model (why this file does what it does):
 
 from app.rag.vector_store import vector_store
 from app.api.FlaskServer import create_app
+from app.observability import init_observability
 
 vector_store.initialize()
 app = create_app()
+# Per-worker, like the connection pool: each forked process needs its own
+# tracer provider + exporter. No-op unless OBSERVABILITY_ENABLED=true.
+init_observability(app)

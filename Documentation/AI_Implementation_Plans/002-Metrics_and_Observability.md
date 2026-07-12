@@ -292,6 +292,40 @@ docker logs dotnet_server | grep trace_id       # telemetry lines now carry trac
 
 If `dotnet restore` fails on any floating package (net11.0 compat), paste the error — fallback is pinning that one package to its latest net-compatible major.
 
+### [AI — 2026_07_12_17_02] Step 3 complete — langchain_service traces; the distributed trace is wired
+
+**The concept this step is built on (worth understanding before reviewing the code): OTel's API/SDK split.** The API (`opentelemetry.trace`) is always importable and always safe — with no SDK provider configured, every span is a NO-OP costing nanoseconds. The SDK (provider + OTLP exporter) is configured only inside `init_observability()`, only when `OBSERVABILITY_ENABLED=true`. Consequence: application code creates spans *unconditionally* — there is not a single `if enabled:` check in `app/orchestration/` or `app/rag/` (verified by grep; the only gate in the codebase is inside `observability.py`). The provider does the gating. Bonus: unit tests exercise the instrumented code paths for free, as no-ops.
+
+**What changed:**
+
+- **3a** New `app/observability.py`: `init_observability(app)` — provider with `service.name=langchain_service` (its label in Jaeger next to `gateway`), BatchSpanProcessor → OTLP → collector (same env-first endpoint logic as the C# side). SDK imports live inside the function so the disabled path never loads them. Called per-process from `wsgi.py` (each gunicorn worker — same reasoning as the per-worker connection pool) and `main.py`.
+- **3b** `FlaskInstrumentor().instrument_app(app)` — server span per request AND the headline mechanism: extracts the gateway's `traceparent` header so our spans *continue* the gateway's trace rather than starting a new one.
+- **3c** Manual spans at the seams:
+  - `pipeline.dispatch` — implemented **inside `registry.register()` itself**: registration wraps every handler (via `dataclasses.replace`, respecting the frozen dataclass). This is the Stage-1/Stage-2 decision "instrument at the registry boundary" made literal — every current AND future pipeline is traced without its author ever thinking about spans. Attributes: `llm.pipeline_id`, `llm.request.user_id`, and post-invoke `llm.model_used`, `llm.latency_ms`, `rag.sources_count`.
+  - `rag.retrieve` in `find_similar` — attributes `rag.k`, `rag.collection`, `rag.results`, `rag.top_score` (the best hit's distance; watching that value across queries is exactly the data your disabled `score_threshold` has been waiting for).
+- `requirements.txt`: + `opentelemetry-sdk`, `-instrumentation-flask`, `-exporter-otlp` (floating, per policy).
+
+**Verification (mine):** py_compile clean on all five touched files; gate-scatter grep confirms the single-gate design; registry wrapper preserves the handler signature so the 23 existing tests exercise the wrapped path in CI.
+
+**Verification (yours — THE acceptance moment, criterion a):**
+
+```
+./build.sh --mode mock --obs
+curl -s localhost:5000/api/llm/chat/rag -X POST -H "Content-Type: application/json" -d '{"user_message":"can I use scripting tools?"}'
+# Jaeger http://localhost:16686 → service "gateway" → Find Traces → newest trace should show
+# ONE tree, TWO services:
+#   gateway: POST /api/llm/chat/rag
+#     └─ gateway: HTTP POST (YARP hop, traceparent injected)
+#         └─ langchain_service: POST /chat/rag        ← Flask continued the trace
+#             └─ langchain_service: pipeline.dispatch  (llm.pipeline_id=chat-rag)
+#                 └─ langchain_service: rag.retrieve   (rag.k=2, rag.top_score=…)
+docker logs dotnet_server | grep trace_id     # paste one id into Jaeger search → same trace
+cd langchain_service && python -m pytest -v   # 23 green, spans no-op'd
+./build.sh --mode mock                        # control (criterion g)
+```
+
+If the two services appear as SEPARATE traces instead of one tree, the traceparent hop broke — report what Jaeger shows and we debug the propagation (that failure mode is itself a great lesson, but let's hope for the tree).
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet
