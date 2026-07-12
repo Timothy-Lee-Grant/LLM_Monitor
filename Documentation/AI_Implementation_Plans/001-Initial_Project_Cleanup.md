@@ -562,4 +562,8 @@ embed = DeterministicFakeEmbedding(size=100)
 
 So I changed the names in langchain_service/app/models/factory.py to conform to this.
 
-This is actually quite a confusing thing and I am not sure that it will even compile (or run I guess in Python's case) because I am attempting to call DeterministicFakeEmbedding but importing DeterministicFakeEmbeddings.
+This is actually quite a confusing thing and I am not sure that it will even compile (or run I guess in Python's case) because I am attempting to call DeterministicFakeEmbedding but importing DeterministicFakeEmbeddings. (but I tested it, and making this change does now cause my python-tests in github actions to pass).
+
+2. Within the add_documents_idempotent method, I noticed that it seems this way of doing the operations will look at all of the documents which are currently needing to be within the vector database, it will then calculate a hash based on the document itself (and all the content), then it will add all those documents. This imples to me that we will be needing to go through all documents, vectorizing them, putting them into our vector database (overwriting the exact same old ones that are already there). This seems like a very wasteful operation. I am wondering if a different approach might be that we check if that id is within our database and if so, we will not attempt to add that document.
+
+As of right now, we only have two sample Document objects, but eventually we will have long pdf and other documents which we will want to store within the database, so in the future it might grow to be more of a problem.
