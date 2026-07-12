@@ -11,6 +11,12 @@ All of this information will need to be collected and be able to be viewable to 
 
 Another thing that I am now thinking about is that we have not yet added tools or memory into this system. This is going to be something that we will also want to have observability for. Therefore in this implementation plan we will need to do it in such a way that allows for easy addition and integration of tools and memory. Maybe this means adding fake stubs, or it means holding off entirely on this implementation plan and working on the tools and memory plan first, then returning to this plan.
 
+## Retrieval 
+
+This can be done within the CI testing regularly because it will be cheap. We will be able to deterministically test the quality of retrieval of the documents from the vector database.
+
+With the retrieval, another thing that will need to be taken into consideration with the architecutre is that I am planning on having different tables for my vector databases. One will be for documents which contain 'acceptable ai usage', this will be used to block potentially harmful user requests, another table will be a group of documents which might be useful to suplement the user's message to give a more helpful answer.
+
 ### LLM as Judge
 
 This will be to judge the output of the responses which the user gets back for their input. 
@@ -27,4 +33,19 @@ But it should be the case that we are automatically connected with the dotnet en
 
 - When I first open up my OpenWebUI on my browser, I get spammed with messages telling me that I am connected.
 
-- 
+## In Scope
+
+I like the ouline which was given for this plan of:
+
+1. OTel tracing: gateway root span → traceparent propagation → Flask/registry spans → Collector → local trace backend. (C#→Python distributed trace working = the headline.)
+Metrics: RED + token/latency counters per pipeline_id, Prometheus + one Grafana dashboard.
+
+2. LLM-layer capture: prompt/chunks/tokens per invocation at the registry boundary (Langfuse, or OTel attributes to start — a genuine Stage 2 discussion: Langfuse now vs OTel-only first).
+
+3. Golden dataset v1 (15–30 items) + retrieval metrics (hit@k, MRR) running in CI mock mode.
+
+4. First LLM-as-judge eval (faithfulness on the golden set), nightly/manual, using your existing judge prompt.
+
+## Out of Scope
+
+alerting/paging, SSE streaming, security gates beyond design notes, checkpointer/memory, RAGAS-the-library (although I am confused as to why REGAS would be out if it is part of the retreival metrics)
