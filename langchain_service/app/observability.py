@@ -61,7 +61,9 @@ def init_observability(app=None) -> bool:
         # Auto-instruments Flask: a server span per request, AND — the headline —
         # extraction of the gateway's `traceparent` header, so our spans CONTINUE
         # the gateway's trace instead of starting a fresh one.
+        # healthz/metrics excluded: probe + scrape traffic every few seconds
+        # would drown real traces in noise.
         from opentelemetry.instrumentation.flask import FlaskInstrumentor
-        FlaskInstrumentor().instrument_app(app)
+        FlaskInstrumentor().instrument_app(app, excluded_urls="healthz,metrics")
 
     return True

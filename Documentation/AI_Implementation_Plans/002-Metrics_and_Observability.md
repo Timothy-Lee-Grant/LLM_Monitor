@@ -326,6 +326,38 @@ cd langchain_service && python -m pytest -v   # 23 green, spans no-op'd
 
 If the two services appear as SEPARATE traces instead of one tree, the traceparent hop broke — report what Jaeger shows and we debug the propagation (that failure mode is itself a great lesson, but let's hope for the tree).
 
+### [AI — 2026_07_12_17_31] Step 4 complete — metrics + Grafana dashboard
+
+**The production gotcha this step centers on (interview-grade):** gunicorn workers are forked processes with separate memory, so naive `prometheus_client` counters live per-worker — a scrape returns whichever worker answered, and numbers bounce. Fix implemented: **multiprocess mode** — `entrypoint.sh` prepares `PROMETHEUS_MULTIPROC_DIR` (cleared each boot to avoid double-counting), workers write shared mmap files, `/metrics` aggregates via `MultiProcessCollector`, and a new `gunicorn.conf.py` `child_exit` hook marks dead workers so restarts don't pollute the numbers. Full explanation lives in `app/metrics.py`'s docstring.
+
+**What changed:**
+
+- **4a** New `app/metrics.py`: `llm_requests_total{pipeline_id, status}`, `llm_request_duration_seconds{pipeline_id}` (buckets 10ms→120s: mock is ms, live is minutes), `llm_tokens_total{pipeline_id, direction}`. Label discipline documented in-module: `pipeline_id` = bounded (4 values); `user_id` deliberately NOT a label (the 018 cardinality trap, now enforced in code comments where the temptation would arise). Recording happens in the SAME registry wrapper as the trace span — one boundary, both pillars; errors increment the counter, get recorded on the span, and re-raise so the API layer still owns HTTP mapping. `/metrics` on Flask is always exposed and never gated: pull model = it costs nothing unless someone scrapes.
+- **4b** Token capture required a small refactor with a lesson in it: `StrOutputParser` was *discarding* `usage_metadata` along with everything else on the `AIMessage`. Chains now stop at the model and read `.content` themselves; shared `extract_usage()` in `pipelines.py` (used by both chain pipelines and `agent_node` — one definition of "token count" everywhere). Graph path carries tokens through two new `ChatState` fields. Live = real counts from ChatOllama; mock = honest zeros (risk 4, documented not hidden).
+- **Contract change (additive, CONTRACTS.md §2 updated with date + provenance):** `metadata.prompt_tokens`, `metadata.completion_tokens`. First real exercise of the additive-evolution rule — old clients unaffected, tests updated to assert presence.
+- **4c** Real dashboard replaces the placeholder (same provisioned file — edit the FILE, not the UI): RED row (rate / errors / p50+p95 via `histogram_quantile`), AI row (token throughput, avg tokens per request), gateway + scrape-health row. The gateway panel's metric name follows OTel semconv and MAY drift by exporter version — the panel title says exactly that and where to fix it (risk 5, budgeted).
+- Housekeeping: Flask instrumentation now excludes `healthz`/`metrics` from tracing (scrape-every-5s spans would drown real traces); `prometheus-client` added to requirements; 2 new tests (`/metrics` serves Prometheus format; a dispatch increments the correctly-labeled counter) → **suite is 25, and all contract tests now verify the token fields**.
+
+**Verification (mine):** py_compile + bash -n clean across all 12 touched files; dashboard JSON parses; grep confirms `StrOutputParser` gone from active code (comments only).
+
+**Verification (yours — acceptance criterion b):**
+
+```
+cd langchain_service && python -m pytest -v          # 25 green
+./build.sh --mode mock --obs
+for i in $(seq 1 20); do for p in chat/basic chat/rag graph/basic graph/rag; do
+  curl -s -o /dev/null localhost:5000/api/llm/$p -X POST -H "Content-Type: application/json" -d '{"user_message":"load test"}'; done; done
+curl -s localhost:5001/metrics | grep llm_requests_total          # per-pipeline counters, consistent across repeated curls (multiproc working)
+# Prometheus http://localhost:9090/targets → BOTH targets UP now
+# Grafana http://localhost:3001 → LLM Monitor dashboard: RED row populated across 4 pipelines,
+#   token panels flat at zero (mock — expected; live run makes them move)
+# If the gateway panel is empty: open its edit view, check the actual metric name at
+#   localhost:5000/metrics, adjust the expr IN THE JSON FILE (risk 5)
+./build.sh --mode mock                                # control: /metrics still works (ungated), no obs containers
+```
+
+Step 5 (Langfuse) is next — it opens with the v3-vs-v2 weight decision, so expect a container-count report from me before code.
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

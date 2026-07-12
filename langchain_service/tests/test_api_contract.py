@@ -40,6 +40,9 @@ def _assert_contract_success(body: dict, pipeline_id: str):
     assert metadata["model_used"] == "mock-stub-provider"
     assert isinstance(metadata["retrieved_sources"], list)
     assert isinstance(metadata["latency_ms"], int)
+    # plan 002 additive fields — zeros in mock mode, but always present
+    assert metadata["prompt_tokens"] == 0
+    assert metadata["completion_tokens"] == 0
 
 
 def _assert_contract_error(body: dict, code: str):

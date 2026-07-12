@@ -11,7 +11,6 @@ import os
 import time
 
 from langchain_core.messages import HumanMessage
-from langchain_core.output_parsers import StrOutputParser
 
 from app.models.factory import ModelFactory
 from app.prompts.MyPromptTemplates import PromptFactory
@@ -37,6 +36,17 @@ def _model_label(model) -> str:
     return getattr(model, "model", None) or model._llm_type
 
 
+def extract_usage(message) -> tuple[int, int]:
+    """(prompt_tokens, completion_tokens) from an AIMessage.
+
+    Live: ChatOllama populates usage_metadata. Mock: absent -> (0, 0), honest
+    zeros rather than estimates (plan 002 risk 4). Shared by chain pipelines
+    and the graph's agent node — one definition of "token count" everywhere.
+    """
+    usage = getattr(message, "usage_metadata", None) or {}
+    return int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0)
+
+
 def _run_assistant_chain(request: ChatRequest, pipeline_id: str, k: int | None) -> ChatResponse:
     """Shared body for the two chain pipelines. k=None means no retrieval."""
     started = time.perf_counter()
@@ -50,16 +60,22 @@ def _run_assistant_chain(request: ChatRequest, pipeline_id: str, k: int | None) 
     sources = [doc.metadata.get("source", "unknown") for doc in documents]
 
     model = ModelFactory.get_chat_model(_resolve_model_name(request))
-    chain = PromptFactory.get_assistant_prompt() | model | StrOutputParser()
-    answer = chain.invoke({"user_message": request.user_message, "context": context})
+    # Chain stops at the model (no StrOutputParser): the raw AIMessage carries
+    # usage_metadata, which the parser would have thrown away. answer = .content.
+    message = (PromptFactory.get_assistant_prompt() | model).invoke(
+        {"user_message": request.user_message, "context": context}
+    )
+    prompt_tokens, completion_tokens = extract_usage(message)
 
     return ChatResponse(
-        response=answer,
+        response=message.content,
         metadata=ChatMetadata(
             pipeline_id=pipeline_id,
             model_used=_model_label(model),
             retrieved_sources=sources,
             latency_ms=int((time.perf_counter() - started) * 1000),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         ),
     )
 
@@ -82,6 +98,8 @@ def _run_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
         "retrieved_chunks": [],
         "messages": [HumanMessage(content=request.user_message)],
         "answer": "",
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
     })
 
     sources = [doc.metadata.get("source", "unknown") for doc in final_state.get("retrieved_chunks", [])]
@@ -93,6 +111,8 @@ def _run_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
             model_used=_resolved_model_label(request),
             retrieved_sources=sources,
             latency_ms=int((time.perf_counter() - started) * 1000),
+            prompt_tokens=final_state.get("prompt_tokens", 0),
+            completion_tokens=final_state.get("completion_tokens", 0),
         ),
     )
 

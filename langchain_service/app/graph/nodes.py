@@ -10,7 +10,6 @@ non-goal for plan 001; the prompt remains in PromptFactory).
 """
 
 from langchain_core.messages import AIMessage
-from langchain_core.output_parsers import StrOutputParser
 
 from app.models.factory import ModelFactory
 from app.prompts.MyPromptTemplates import PromptFactory
@@ -27,14 +26,26 @@ def retrieve_node(state: ChatState) -> dict:
 
 def agent_node(state: ChatState) -> dict:
     """Invoke the model with whatever context retrieval produced (possibly none)."""
+    # Imported here (not at module top) to avoid a circular import:
+    # pipelines -> build_graph -> nodes -> pipelines.
+    from app.orchestration.pipelines import extract_usage
+
     user_msg = state["messages"][-1].content
     context = "\n\n".join(doc.page_content for doc in state.get("retrieved_chunks", []))
 
     model = ModelFactory.get_chat_model(state["desired_model"])
-    chain = PromptFactory.get_assistant_prompt() | model | StrOutputParser()
+    # Raw AIMessage (no StrOutputParser) so usage_metadata survives — same
+    # reasoning as the chain pipelines in plan 002 Step 4.
+    message = (PromptFactory.get_assistant_prompt() | model).invoke(
+        {"user_message": user_msg, "context": context}
+    )
+    prompt_tokens, completion_tokens = extract_usage(message)
 
-    answer = chain.invoke({"user_message": user_msg, "context": context})
-    return {"answer": answer}
+    return {
+        "answer": message.content,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+    }
 
 
 def respond_node(state: ChatState) -> dict:

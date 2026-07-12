@@ -19,3 +19,7 @@ class ChatState(TypedDict):
     retrieved_chunks: list  # list[Document]; empty for non-RAG runs
     messages: Annotated[list, add_messages]
     answer: str
+    # plan 002 Step 4: agent_node records model token usage here so the
+    # pipeline layer can report it in ChatMetadata (zeros in mock mode).
+    prompt_tokens: int
+    completion_tokens: int
