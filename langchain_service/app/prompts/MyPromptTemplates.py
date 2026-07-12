@@ -1,6 +1,14 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 
+# Prompt versions (plan 002 Step 5c). Bump the version WHENEVER the template
+# text changes — eval scores and traces are tagged with these, so a quality
+# shift is attributable to the exact prompt that caused it. This is the seed
+# of prompt management (Timothy's Stage 1 concern about evolving prompts).
+ASSISTANT_PROMPT_VERSION = "assistant.friendly@1"
+POLICY_CHECKER_PROMPT_VERSION = "policy.checker@1"
+LLM_JUDGE_PROMPT_VERSION = "judge.accuracy@1"
+
 
 class PromptFactory:
 

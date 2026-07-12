@@ -31,6 +31,31 @@ def observability_enabled() -> bool:
     return os.getenv("OBSERVABILITY_ENABLED", "false").lower() == "true"
 
 
+# ---- Langfuse (plan 002 Step 5) --------------------------------------------
+# Same gating philosophy as spans: pipelines call get_langchain_callbacks()
+# unconditionally; it returns [] unless observability is on AND keys exist.
+
+_langfuse_handler = None
+
+
+def get_langchain_callbacks() -> list:
+    """LangChain/LangGraph callback handlers for pipeline invocations.
+
+    When active, the Langfuse CallbackHandler observes every chain/graph/node
+    step (this is D5 from Stage 2: per-node spans for free) and records
+    generations — rendered prompt, completion, model, token usage — to the
+    Langfuse UI. Returns [] when disabled: `config={"callbacks": []}` is a
+    no-op for LangChain.
+    """
+    global _langfuse_handler
+    if not observability_enabled() or not os.getenv("LANGFUSE_PUBLIC_KEY"):
+        return []
+    if _langfuse_handler is None:
+        from langfuse.langchain import CallbackHandler  # import cost only when active
+        _langfuse_handler = CallbackHandler()
+    return [_langfuse_handler]
+
+
 def init_observability(app=None) -> bool:
     """Configure the OTel SDK (push traces to the collector) and instrument Flask.
 

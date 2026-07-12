@@ -358,6 +358,36 @@ curl -s localhost:5001/metrics | grep llm_requests_total          # per-pipeline
 
 Step 5 (Langfuse) is next — it opens with the v3-vs-v2 weight decision, so expect a container-count report from me before code.
 
+### [AI — 2026_07_12_18_04] Step 5 complete — Langfuse v3 full stack (Timothy's choice at the decision point)
+
+**Decision record:** I fetched Langfuse's current self-hosting docs live: v3 = web + worker + Postgres + ClickHouse + Redis + S3, with v2 now officially "Legacy Docs." Presented three options (v3 full / v2 light / defer); Timothy chose **v3 full stack** — consistent with his D1 "full Langfuse now" and the strongest learning/resume story (it's the exact architecture behind Langfuse Cloud: queued S3-first ingestion, OLAP reads from ClickHouse).
+
+**What changed:**
+
+- **5a** Six new obs-profile services: `langfuse-web` (UI :3002), `langfuse-worker`, `langfuse-postgres` (its own instance ON PURPOSE — Langfuse migrations must never be able to touch RAG data; both DB containers pinned to UTC per Langfuse's requirement), `clickhouse`, `langfuse-redis`, `minio` (bucket pre-created via entrypoint mkdir). Web+worker share one env block via a YAML **anchor** (`&langfuse-env` / `*langfuse-env` — one definition, two consumers; verified programmatically that both resolve identically). **Headless initialization** (`LANGFUSE_INIT_*`) creates org/project/user/API keys on first boot — the found-issue-3 lesson applied a third time: zero click-setup trapped in volumes; your login is `timothy@localhost.dev` / `local-dev-password-1`. All secrets are local-only constants, commented as such.
+- **5b** SDK integration continues the single-gate philosophy: new `get_langchain_callbacks()` in `observability.py` returns `[]` unless enabled+keyed (pipelines call it unconditionally — `callbacks: []` is a LangChain no-op). Both invoke sites (chain + graph) pass a shared `_invoke_config()`: Langfuse handler + metadata (`langfuse_user_id`, `langfuse_tags=[pipeline_id]`, `prompt_version`, and **`thread_id: None`** — B3's future-proofing recorded on every generation from day one; the field existing is what matters). For graphs, the config propagates into every node → retrieve/agent/respond appear as nested observations (D5 delivered).
+- **5c** Prompt versioning seeded: `ASSISTANT_PROMPT_VERSION = "assistant.friendly@1"` (+ policy/judge constants) in `MyPromptTemplates.py`, recorded on every generation. Rule documented at the constant: bump on ANY template text change, so eval scores stay attributable to the prompt that produced them.
+- Housekeeping: `langfuse` in requirements (floating); conftest now force-disables observability so the suite is deterministic regardless of shell env; 2 new gating tests → **suite is 27**.
+
+**Verification (mine):** compose parses; obs profile = exactly 10 services, default set untouched; anchor replication asserted; py_compile clean.
+
+**Verification (yours — acceptance criterion c; first `--obs` boot pulls big images, ClickHouse wants ~1-2GB RAM):**
+
+```
+./build.sh --mode mock --obs
+docker compose -p llm_monitor ps                    # langfuse_web healthy may take ~1 min (migrations)
+# Langfuse UI http://localhost:3002 → login timothy@localhost.dev / local-dev-password-1
+curl -s localhost:5000/api/llm/graph/rag -X POST -H "Content-Type: application/json" -d '{"user_message":"can I use scripting tools?"}'
+# Langfuse → Traces → newest: nested observations (graph → retrieve/agent/respond),
+#   rendered prompt with injected context, tags [graph-rag], user anonymous,
+#   metadata carrying prompt_version + thread_id
+# Cross-check: metadata pipeline_id matches, and the same request appears in Jaeger
+cd langchain_service && python -m pytest -v         # 27 green
+./build.sh --mode mock                              # control (criterion g)
+```
+
+**Known-unknowns flagged:** exact Langfuse env-var names drift between image versions — if web/worker crash-loop, `docker logs langfuse_web` will name the missing var; diff against their reference compose (link in the compose comment) and fix in ONE place thanks to the anchor. The SDK import path (`langfuse.langchain`) is current-generation; if the installed SDK is older the import error will say so and the fallback is the legacy `langfuse.callback` path — one-line change in `observability.py`.
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
 Not Gotten To Yet

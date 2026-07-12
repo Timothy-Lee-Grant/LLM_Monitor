@@ -36,6 +36,11 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}   # consumed from Step 3 on
+      # Langfuse SDK config (plan 002 Step 5) — matches the LANGFUSE_INIT_* keys
+      # above; only consulted when OBSERVABILITY_ENABLED=true.
+      - LANGFUSE_HOST=http://langfuse-web:3000
+      - LANGFUSE_PUBLIC_KEY=pk-lf-local-llm-monitor
+      - LANGFUSE_SECRET_KEY=sk-lf-local-llm-monitor
       - LLM_MODE=${LLM_MODE:-mock}
       - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
       - POSTGRES_USER=${POSTGRES_USER:-admin}
@@ -126,6 +131,117 @@ services:
     depends_on:
       - prometheus
 
+  # ---- Langfuse v3 (plan 002 Step 5; Timothy chose full v3 stack) --------
+  # Production-real architecture: web + worker apps, postgres (transactional),
+  # clickhouse (OLAP for traces/scores), redis (queue/cache), minio (S3 event
+  # buffer). All obs-profile-gated. Secrets below are LOCAL-ONLY constants.
+  # If these containers crash-loop after a Langfuse image update, diff the env
+  # names against their reference compose:
+  # https://github.com/langfuse/langfuse/blob/main/docker-compose.yml
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    container_name: langfuse_web
+    profiles: ["obs"]
+    ports:
+      - "3002:3000"     # UI: http://localhost:3002 (3000=OpenWebUI, 3001=Grafana)
+    environment: &langfuse-env
+      - DATABASE_URL=postgresql://langfuse:langfuse_local_pw@langfuse-postgres:5432/langfuse
+      - SALT=local-dev-salt-not-secret
+      - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+      - NEXTAUTH_SECRET=local-dev-nextauth-secret
+      - NEXTAUTH_URL=http://localhost:3002
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=clickhouse_local_pw
+      - CLICKHOUSE_CLUSTER_ENABLED=false
+      - REDIS_HOST=langfuse-redis
+      - REDIS_PORT=6379
+      - REDIS_AUTH=redis_local_pw
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=auto
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=minio
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=minio_local_pw
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_EVENT_UPLOAD_PREFIX=events/
+      - TELEMETRY_ENABLED=false
+      # Headless init: org/project/user/API keys exist on first boot — no
+      # click-setup trapped in a volume (the found-issue-3 lesson, again).
+      - LANGFUSE_INIT_ORG_ID=llm-monitor
+      - LANGFUSE_INIT_PROJECT_ID=llm-monitor-local
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-local-llm-monitor
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-local-llm-monitor
+      - LANGFUSE_INIT_USER_EMAIL=timothy@localhost.dev
+      - LANGFUSE_INIT_USER_PASSWORD=local-dev-password-1
+      - LANGFUSE_INIT_USER_NAME=Timothy
+    depends_on:
+      - langfuse-postgres
+      - clickhouse
+      - langfuse-redis
+      - minio
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: langfuse_worker
+    profiles: ["obs"]
+    environment: *langfuse-env
+    depends_on:
+      - langfuse-postgres
+      - clickhouse
+      - langfuse-redis
+      - minio
+
+  langfuse-postgres:
+    # Separate from pgvector-service on purpose: Langfuse migrations/upgrades
+    # must never be able to touch our RAG data. UTC required by Langfuse.
+    image: postgres:16-alpine
+    container_name: langfuse_postgres
+    profiles: ["obs"]
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse_local_pw
+      - POSTGRES_DB=langfuse
+      - TZ=UTC
+    volumes:
+      - langfuse_pg_data:/var/lib/postgresql/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    profiles: ["obs"]
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=clickhouse_local_pw
+      - TZ=UTC
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  langfuse-redis:
+    image: redis:7-alpine
+    container_name: langfuse_redis
+    profiles: ["obs"]
+    command: ["redis-server", "--requirepass", "redis_local_pw"]
+
+  minio:
+    image: minio/minio:latest
+    container_name: langfuse_minio
+    profiles: ["obs"]
+    # mkdir trick pre-creates the bucket (a bucket is just a top-level dir
+    # in minio's data root) before the server starts.
+    entrypoint: ["sh", "-c", "mkdir -p /data/langfuse && exec minio server /data --address :9000"]
+    environment:
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=minio_local_pw
+    volumes:
+      - minio_data:/data
+
   pgvector-service:
     image: pgvector/pgvector:pg16
     container_name: pgvector_service
@@ -148,3 +264,6 @@ volumes:
   openwebui_data:
   prometheus_data:
   grafana_data:
+  langfuse_pg_data:
+  clickhouse_data:
+  minio_data:

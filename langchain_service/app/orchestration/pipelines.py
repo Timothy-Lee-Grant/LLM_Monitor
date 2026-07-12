@@ -13,11 +13,34 @@ import time
 from langchain_core.messages import HumanMessage
 
 from app.models.factory import ModelFactory
-from app.prompts.MyPromptTemplates import PromptFactory
+from app.observability import get_langchain_callbacks
+from app.prompts.MyPromptTemplates import PromptFactory, ASSISTANT_PROMPT_VERSION
 from app.rag.vector_store import vector_store
 from app.graph.build_graph import build_graph
 from app.orchestration.contracts import ChatRequest, ChatResponse, ChatMetadata
 from app.orchestration.registry import Pipeline, register
+
+
+def _invoke_config(request: ChatRequest, pipeline_id: str) -> dict:
+    """LangChain RunnableConfig shared by chains and graphs: Langfuse callbacks
+    (empty list = no-op when observability is off) + trace metadata.
+
+    langfuse_user_id / langfuse_tags are recognized by the Langfuse handler.
+    thread_id is the B3 future-proofing: reserved in CONTRACTS.md, recorded on
+    every generation NOW so multi-turn implicit-feedback mining can link
+    consecutive turns the day memory lands. None until then — that's fine,
+    the FIELD existing is what matters.
+    """
+    return {
+        "callbacks": get_langchain_callbacks(),
+        "metadata": {
+            "langfuse_user_id": request.user_id,
+            "langfuse_tags": [pipeline_id],
+            "pipeline_id": pipeline_id,
+            "prompt_version": ASSISTANT_PROMPT_VERSION,
+            "thread_id": None,  # populated when memory (checkpointer) arrives
+        },
+    }
 
 # Compiled ONCE at import (startup), then shared statelessly across all requests:
 # every .invoke() carries its own state dict, so concurrent users never interact.
@@ -63,7 +86,8 @@ def _run_assistant_chain(request: ChatRequest, pipeline_id: str, k: int | None) 
     # Chain stops at the model (no StrOutputParser): the raw AIMessage carries
     # usage_metadata, which the parser would have thrown away. answer = .content.
     message = (PromptFactory.get_assistant_prompt() | model).invoke(
-        {"user_message": request.user_message, "context": context}
+        {"user_message": request.user_message, "context": context},
+        config=_invoke_config(request, pipeline_id),
     )
     prompt_tokens, completion_tokens = extract_usage(message)
 
@@ -92,15 +116,20 @@ def _run_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
     """Shared body for the two graph pipelines."""
     started = time.perf_counter()
 
-    final_state = graph.invoke({
-        "user_id": request.user_id,
-        "desired_model": _resolve_model_name(request),
-        "retrieved_chunks": [],
-        "messages": [HumanMessage(content=request.user_message)],
-        "answer": "",
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-    })
+    # config propagates to every node invocation inside the graph — the Langfuse
+    # handler therefore sees retrieve/agent/respond as nested observations (D5).
+    final_state = graph.invoke(
+        {
+            "user_id": request.user_id,
+            "desired_model": _resolve_model_name(request),
+            "retrieved_chunks": [],
+            "messages": [HumanMessage(content=request.user_message)],
+            "answer": "",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+        },
+        config=_invoke_config(request, pipeline_id),
+    )
 
     sources = [doc.metadata.get("source", "unknown") for doc in final_state.get("retrieved_chunks", [])]
 
