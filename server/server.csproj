@@ -4,6 +4,10 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- plan 002 Step 9: next `dotnet restore` writes packages.lock.json —
+         commit it, and the floating "*" versions above become reproducible
+         (the resolved-environment pinning policy, closing plan-001 risk 2). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>

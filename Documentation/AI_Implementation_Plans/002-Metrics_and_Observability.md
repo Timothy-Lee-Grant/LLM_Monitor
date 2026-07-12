@@ -463,6 +463,53 @@ docker exec langchain_service python -m eval.eval_judge --tier quality --calibra
 
 Interesting live-mode reading: if g003's answer scores lower than g001's, check whether it's a retrieval miss (Step 7's numbers) or a generation problem — being able to SPLIT that blame is exactly what this two-eval design was for. Step 9 (CI wiring + verification script + Stage 5 scaffold) closes the plan.
 
+### [AI — 2026_07_12_19_27] Step 9 complete — CI wiring, acceptance script, lock groundwork. Stage 4 closed.
+
+**What changed:**
+
+- **9a** `ci.yml`: two eval steps appended to the python job. The retrieval step uses a **self-arming gate**: while no baseline is committed it runs ungated (with a CI notice telling you how to arm it); the moment `eval/baselines/retrieval_plumbing.json` lands in the repo, every subsequent CI run enforces tolerance 0.0 automatically. The judge step exits 1 on any unparseable verdict. Both mock, zero containers, seconds of runtime.
+- **9b** `scripts/observability_check.sh` — automates: stack reachability (4 UIs/health endpoints), traffic generation through the gateway, **criterion (a) via the Jaeger query API** (asserts one trace whose process list contains BOTH service names — the distributed-trace claim checked by machine, not eyeball), criterion (b) via the Prometheus query API (targets up + `llm_requests_total` across all 4 pipelines), criterion (c) via Langfuse's public API with the headless-init keys, criterion (d) plumbing tiers in-container. Manual steps printed for Grafana visual check, quality baselines, criterion (f) fire-alarm, and criterion (g) control build.
+- **Lock groundwork (closing plan-001 risk 2 + this plan's risk 2 together):** `server.csproj` now has `RestorePackagesWithLockFile` — your next `dotnet restore` writes `packages.lock.json`; commit it and the floating `*` versions become reproducible. Python side (run after a verified `--obs` build, then commit):
+
+  ```
+  docker compose -p llm_monitor exec langchain_service pip freeze > langchain_service/requirements.lock
+  ```
+
+  Follow-up (one line each, on request): dockerfile + CI switch to installing from the lock.
+
+**Verification (mine):** CI YAML parses; script syntax clean; the Jaeger-API assertion expression validated against a synthetic two-service payload.
+
+**Verification (yours):** push a branch — CI should show pytest (39) + both eval steps green with the "no committed baseline yet" notice; then the full pass:
+
+```
+./build.sh --mode mock --obs && bash scripts/observability_check.sh
+```
+
+**Stage 4 is closed.** Run the script in mock and live, work the manual list, paste results into Stage 5 below.
+
 # Stage 5 (Final Results, Testing, Verficiation)
 
-Not Gotten To Yet
+### Acceptance criteria matrix (fill from observability_check.sh output + manual checks)
+
+| # | Criterion (Stage 3) | Mock+obs | Live+obs | Evidence / notes |
+|---|---|---|---|---|
+| a | One trace, both services, same trace id | ☐ | ☐ | script: Jaeger API check |
+| b | Grafana RED + token metrics per pipeline | ☐ | ☐ | script (Prometheus) + manual (Grafana visual) |
+| c | Prompt/chunks/tokens in Langfuse, linked to trace | ☐ | ☐ | script (API) + manual (UI visual) |
+| d | Retrieval eval: plumbing green in CI; quality baseline saved | ☐ | ☐ | CI run + `--tier quality --save-baseline` |
+| e | Judge eval: per-item scores + calibration report | n/a | ☐ | `--tier quality --calibration` |
+| f | Induced regression fails the gate | ☐ | n/a | fire-alarm drill (corrupt id → exit 1 → revert) |
+| g | No `--obs` = plan-001 container set, 39 tests green | ☐ | ☐ | `docker compose ps` diff + pytest |
+
+### Results log (chronological — paste script output and observations below)
+
+*(awaiting Timothy's runs)*
+
+### Known deferred items (carried out of plan 002, not failures)
+
+- **Your authorship slots:** golden rows (15–30), calibration rows (5–10, YOUR scores), rubric anchors — the eval is machinery until these are yours.
+- **Lock files:** commit `packages.lock.json` (after next dotnet restore) and `requirements.lock` (command above); then switch dockerfile + CI to install from locks.
+- **Langfuse push API drift** (Step 8): if `eval_judge` prints a push-skip reason, paste it — one-line SDK-call fix; reports remain source of truth meanwhile.
+- **Grafana gateway panel metric name** (Step 4 risk 5): verify against `localhost:5000/metrics`, adjust the JSON if empty.
+- **score_threshold tuning:** now unblocked — quality-tier reports + `rag.top_score` span data are exactly the inputs; a future mini-change once you have live numbers.
+- **Quality-tier scheduling:** currently manual (`docker exec`); a nightly scheduled run (GitHub Actions cron against a self-hosted runner, or a local cron) is a small future addition once baselines stabilize.
