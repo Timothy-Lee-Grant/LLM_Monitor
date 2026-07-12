@@ -57,7 +57,10 @@ class ModelFactory:
             # so retrieval behavior is reproducible and assertable in tests.
             # size=768 matches nomic-embed-text's dimension, so mock and live
             # rows share the same pgvector column schema.
-            return DeterministicFakeEmbeddings(size=768)
+            # NOTE: the class name is SINGULAR (DeterministicFakeEmbedding) while its
+            # sibling FakeEmbeddings is plural — inconsistent naming in langchain_core
+            # itself, which is how the original typo slipped in (Timothy caught it).
+            return DeterministicFakeEmbedding(size=768)
 
         # Fallback normalized to the compose *service* name (matches get_chat_model);
         # in practice OLLAMA_BASE_URL is always set by docker-compose.

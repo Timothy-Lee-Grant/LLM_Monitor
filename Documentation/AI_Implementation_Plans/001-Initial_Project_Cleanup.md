@@ -567,3 +567,34 @@ This is actually quite a confusing thing and I am not sure that it will even com
 2. Within the add_documents_idempotent method, I noticed that it seems this way of doing the operations will look at all of the documents which are currently needing to be within the vector database, it will then calculate a hash based on the document itself (and all the content), then it will add all those documents. This imples to me that we will be needing to go through all documents, vectorizing them, putting them into our vector database (overwriting the exact same old ones that are already there). This seems like a very wasteful operation. I am wondering if a different approach might be that we check if that id is within our database and if so, we will not attempt to add that document.
 
 As of right now, we only have two sample Document objects, but eventually we will have long pdf and other documents which we will want to store within the database, so in the future it might grow to be more of a problem.
+
+#### [AI — 2026_07_11_20_17] Response to both found issues
+
+**Issue 1 (DeterministicFakeEmbedding import) — your suspicion was CORRECT, and the fix was incomplete.** I checked `factory.py`: your commit fixed the *import* (line 5, singular) but line 60 still *called* the plural `DeterministicFakeEmbeddings(size=768)`. Three things worth understanding here:
+
+1. *Why it "compiled" anyway:* Python has no compile-time name resolution. `py_compile` only checks syntax; names are looked up **at call time**. So the module imports fine, and the NameError only fires when `get_embedding_model` actually executes in mock mode — i.e., the first real mock-mode ingestion after your change would have crashed the container at startup.
+2. *Why CI stayed green:* none of the 18 tests ever calls `get_embedding_model` — the API tests monkeypatch retrieval, and the ingestion tests only exercise the pure `deterministic_id` function. A green suite is only as honest as its coverage. This is the plan-001 CI lesson recurring one level deeper: last time the pipeline installed nothing; this time it installed everything and still couldn't see this bug.
+3. *Why the typo happened at all (my error, for the record):* langchain_core's own naming is inconsistent — the base class is `Embeddings` (plural), the sibling fake is `FakeEmbeddings` (plural), but this one is `DeterministicFakeEmbedding` (singular). I pattern-matched to the plural convention instead of verifying the symbol. Your instinct to check the documentation was exactly the right move.
+
+*Actions taken:* fixed the call site (line 60 → singular, with a comment memorializing the naming trap), and added `tests/test_factory.py` — a test that CALLS the mock embedding path (asserts constructible, 768-dim, deterministic same-text→same-vector, different-text→different-vector) plus a mock chat-model label test. That closes the specific coverage gap that let your CI pass with a live NameError in the tree. Suite is now 20 tests.
+
+**Issue 2 (re-embedding every startup) — your analysis is right, and it's a real scaling concern.** Current behavior: every startup re-embeds every seed doc and upserts it, even when the row is already there and identical. With 2 docs that's milliseconds; with chunked PDFs it's real compute (embedding is the expensive step — the DB write is cheap). Your proposed fix — check existence first, skip what's already there — is the correct first optimization, and content-hash ids make it *safe*: if the id exists, the content is by definition identical, so skipping loses nothing.
+
+Proposed change to `add_documents_idempotent` (~4 lines, one extra round-trip):
+
+```python
+ids = [self.deterministic_id(d) for d in docs]
+existing = {doc.id for doc in self._require_initialized().get_by_ids(ids)}
+missing = [(i, d) for i, d in zip(ids, docs) if i not in existing]
+if missing:
+    self._store.add_documents([d for _, d in missing], ids=[i for i, _ in missing])
+```
+
+One `get_by_ids` SELECT replaces N embedding computations — embedding cost is now paid only for genuinely new content.
+
+Two things you should know are *deliberately not solved* by this (so we scope them consciously rather than discover them later):
+
+1. **Orphans on edit.** Because id = sha256(content), an *edited* document gets a NEW id — the old version stays behind as a stale row that retrieval can still surface. True synchronization needs a delete side ("rows in DB whose ids are no longer in the source set"). LangChain has purpose-built machinery for exactly this delta-sync problem (the indexing API / `RecordManager`, with `incremental` and `full` cleanup modes) — worth adopting when documents become editable, rather than reinventing it.
+2. **Startup ingestion doesn't scale past a small corpus.** When the PDFs arrive, ingestion should become its own job (loader → chunker → embedder → delta-sync), triggered on demand or on a schedule — not something that blocks container startup. That's a proper future implementation plan ("document ingestion pipeline"), and it's also where your loader/chunker TODO from the original `Ingestion.py` naturally lands.
+
+*Recommendation:* I implement the skip-existing optimization now as a plan-001 addendum (small, in scope for "ensure RAG saves documents correctly", immediately testable — ingestion twice, second run embeds zero docs), and we log orphan-cleanup + offline ingestion as the seed of a future plan. Your call — say go and it's a 15-minute change with a test.
