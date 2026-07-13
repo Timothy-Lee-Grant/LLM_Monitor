@@ -1,58 +1,69 @@
-# Purpose
+# LLM_Monitor
 
-The purpose of this project is to build a system which utilizes langchain to learn about and get the opportunity to demonstrate cababilities within this space that I am EXTREMELY interested in. I want all the actual code in this project to be my own, but I use Claude as a mentor who ONLY creates documentation (found in the Documentation folder), this is where I get evaluations on concepts that it feels I am weak or missing, code reviews, suggestions for targeting my specific goal of getting into **Microsoft** as a software engineer, and full lecture notes on those concepts which Claude has found that I am weak on.
+A self-hosted LLM serving platform: a C# / .NET gateway routes traffic through telemetry middleware and YARP to a Python LangChain/LangGraph service, which runs chat and RAG pipelines against local Ollama models with a pgvector database for retrieval. OpenWebUI sits on top as the chat frontend, talking to the system through an OpenAI-compatible API that I implemented.
 
-This project was deleloped in two stages.
-## First Stage: Hand Written Scaffolding
-This stage was my opportunity to get my hands dirty and develop out the system that I wanted. I developed by hand all of the components which I wanted in my project, got the system working to a reasonable level, created a good base scafoldiing for the AI to understand exactly what this project is, and where it is going.
+I built this to go deep on AI orchestration and to have a real system where I could practice the engineering discipline I want to bring to a production team: contract-first API design, honest CI, health-checked container orchestration, and a documented review process for every change.
 
-## Second Stage: AI Assisted Development
-The second stage is taking the base scaffolding which was developed by hand and rolling it out into a full application.
+# Architecture
 
-## Hand Written Components
-### Docker System
-A build.sh script invoked the Docker Compose file which built up all required containers (dotnet server, langchain_service, posgres vector database, Ollama service, openwebui). The build script injected enviornment variables into the containers which would process both live and mock (to allow for use of mock on my computer which is not very powerful, so can't run heavy llms).
+Request flow:
 
-### Dotnet Server 
-A .NET server written in C# that uses YARP to direct traffic from the outside world to the docker network inner services.
+OpenWebUI -> dotnet gateway (telemetry middleware -> YARP reverse proxy) -> langchain_service (Flask) -> pipeline registry -> Ollama / pgvector
 
-### Langchain / LangGraph
-Within the langchain_service, there is a flask web server taking in API endpoints. This is then directed to 
+The services, each in its own container:
 
-# Concepts Implemented
+- **dotnet_server** — C# gateway. Custom telemetry middleware logs method, path, status, and latency for every request on the way out, then YARP forwards to the inner network. Auth and rate limiting are designed as future middleware in front of the same forwarder.
+- **langchain_service** — Python/Flask. Owns a pipeline registry with four pipelines: chat-basic and chat-rag (LangChain chains), graph-basic and graph-rag (LangGraph). Also exposes an OpenAI-compatible surface (/v1/models, /v1/chat/completions) where the model id selects the pipeline, so adding a registry entry automatically exposes a new "model" to any OpenAI client.
+- **pgvector-service** — Postgres with the pgvector extension for RAG retrieval. Ingestion is idempotent: documents are hashed and only vectorized once, not re-embedded on every startup.
+- **ollama** — local model serving, only started under the live compose profile.
+- **openwebui** — chat frontend. Configured to enter through the gateway, so every chat transits the telemetry middleware.
 
-## General Software Engineering
+# Running It
 
-Docker, microservice architecture, middleware, client / server, http, REST, API, endpoints, .....
+```
+./build.sh --mode mock        # lightweight, stubbed model provider
+./build.sh --mode live        # real Ollama models (add --gpu for the GPU compose override)
+bash scripts/acceptance_check.sh mock   # PASS/FAIL check against the running system
+```
 
-## AI Orchestration Concepts
+The mock mode exists because my development machine can't run heavy models. The entire pipeline (gateway, registry, RAG retrieval, contracts) executes identically in both modes; only the model provider is stubbed. Chat at http://localhost:3000, gateway at http://localhost:5000.
 
-Vector database (ingesting documents, vectorizing documents, querying database for semantic top k closest elements), langchain, .....
+# Engineering Decisions
 
-# Technologies Used
+**Contract-first API design.** Every HTTP boundary is defined in CONTRACTS.md before it is implemented. Wire shapes are snake_case everywhere, changes must be additive within a version, and both the C# and Python sides implement the shapes exactly. C# maps PascalCase to the wire via JsonNamingPolicy rather than hand-renaming fields.
 
-## Dotnet Server and Middleware
+**Production lockdown is a config change, not a code change.** The langchain_service is directly reachable on port 5001 for development and testing. Deleting that one port mapping in docker-compose is the lockdown switch; the gateway path is the only path that remains.
 
-The main server for this project is written in C# and will take user requests and route them to the apporiate service.
+**Startup ordering through health checks, not sleeps.** The gateway waits on the langchain service being healthy, which waits on postgres being healthy. The langchain healthcheck is stdlib Python because the slim base image ships neither curl nor wget, and its start_period budgets for one-time RAG ingestion.
 
-## LangChain
+**Honest CI.** The original GitHub Actions workflow "passed" by installing nothing and running a test that imported no application code. I rebuilt it so the Python job installs the real requirements and runs the real pytest suite, and a separate job builds and tests the C# solution. A green build now means something.
 
-The interactions with AI models and agents will be orchastrated with Langchian
+# Testing
 
-## Docker 
+- Python: pytest suites covering the API contract, the pipeline registry, the model factory, and idempotent ingestion ids.
+- C#: xUnit project for the gateway.
+- System level: scripts/acceptance_check.sh runs an end-to-end PASS/FAIL pass against the live containers, deliberately without set -e so every check reports instead of dying on the first failure.
 
-All microservices are contained in their own seperate docker container and can be started using the docker-compose file. A useful start up script allows you to just invoke the script (by doing ./build) and it will take care of tearing down the old containers and images, and building, comiling and starting the new containers.
+# How This Was Built
+
+This project was developed in two stages, and the process is documented in the repo because I think the process is part of the work.
+
+**Stage 1: hand-written scaffolding.** I built every component myself — the Docker system, the C# gateway, the langchain service — and got the full path working end to end, so that I understood every piece before any AI touched the code.
+
+**Stage 2: AI-collaborative development with review gates.** Larger features go through a staged process (Documentation/AI_Implementation_Plans): I write the design goals, the AI and I discuss architecture and tradeoffs, it produces a step-by-step implementation plan, and then it implements one step at a time with my explicit permission per step. I review every change like a PR — the git history includes rounds of my review feedback and the resulting fixes. Separately, Claude acts as a mentor that writes code reviews and lecture-style documents on concepts it finds I am weak on (Documentation folder).
+
+I did this deliberately: AI-assisted development is how software gets built now, and I wanted to practice doing it with the same rigor as human code review rather than accepting generated code blind.
+
+# Roadmap
+
+- Observability and metrics collection (in progress on the ai_dev branch): structured telemetry beyond the current middleware logging.
+- Evals (in progress on the ai_dev branch): retrieval evaluation and LLM-as-judge evaluation against a golden dataset, wired into CI.
+- Streaming responses on the OpenAI surface, auth and rate limiting middleware at the gateway, and conversation memory via LangGraph checkpointing (thread_id is already reserved in the contract).
 
 # Milestones
 
-## June 23, 2026 Initial Launch Date
-This is the day I origionally decided to start working on the project.
-
-## July 2, 2026 Basic Docker System Configuration
-The build script will gracefully invoke the docker compose file with preset enviornment variables, the docker compose file will spin up the basic services of the dotnet server, the langchain container, the postgres (pgvector) database, and a container to invoke llm model pulling.
-
-## July 8, 2026: Hook up all components within the langchain container
-As of now, langchain has been proven out in parts, but it needs to have the full pipeline set up and built.
-
-## July 10, 2026: Switching from Complete Hand Developing to AI Collabrative Dev
-I was able to get the framework such that my system is able to communicate to my langchain service through the Openwebui frontend. I am then able to invoke my LLM, and provide injected system prompts, targeted model invocations, 
+- June 23, 2026 — project start.
+- July 2, 2026 — Docker system: build script, compose file, all five services spinning up with environment injection.
+- July 8, 2026 — full langchain pipeline connected end to end.
+- July 10, 2026 — OpenWebUI talking to my service through the gateway; switched from pure hand development to the staged AI-collaborative process.
+- July 11, 2026 — first implementation plan merged (PR #2): pipeline registry, LangGraph pipelines, real YARP proxy, OpenAI-compatible surface, honest CI, idempotent ingestion.
