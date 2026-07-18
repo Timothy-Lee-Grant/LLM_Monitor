@@ -23,10 +23,18 @@ The services, each in its own container:
 ```
 ./build.sh --mode mock        # lightweight, stubbed model provider
 ./build.sh --mode live        # real Ollama models (add --gpu for the GPU compose override)
+./build.sh --mode mock --obs  # either mode + the observability stack (Jaeger, Prometheus, Grafana, Langfuse)
 bash scripts/acceptance_check.sh mock   # PASS/FAIL check against the running system
+bash scripts/observability_check.sh     # PASS/FAIL check of the observability stack (requires --obs)
 ```
 
 The mock mode exists because my development machine can't run heavy models. The entire pipeline (gateway, registry, RAG retrieval, contracts) executes identically in both modes; only the model provider is stubbed. Chat at http://localhost:3000, gateway at http://localhost:5000.
+
+# Observability
+
+With `--obs`, every request leaves a story: a distributed trace across the C# gateway and Python service (one `traceparent` header stitching both into a single Jaeger tree), RED + token metrics per pipeline in Grafana, the fully rendered prompt and retrieved chunks in Langfuse, and gateway log lines carrying the trace id so logs join to traces. A golden-dataset eval harness (hit@k / MRR plus an LLM-as-judge faithfulness score) runs its deterministic tier in CI behind a self-arming regression gate. Everything is profile-gated: without the flag, none of it runs.
+
+**Startup steps and a guided tour of the telemetry (one request traced through all four pillars): [observability/README.md](observability/README.md).**
 
 # Engineering Decisions
 
