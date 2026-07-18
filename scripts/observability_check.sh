@@ -18,13 +18,25 @@ PASS=0; FAIL=0
 result() { if [ "$1" -eq 0 ]; then echo "  PASS: $2"; PASS=$((PASS+1)); else echo "  FAIL: $2"; FAIL=$((FAIL+1)); fi }
 assert_json() { echo "$1" | python3 -c "import sys,json; d=json.load(sys.stdin); assert ($2), d" 2>/dev/null; }
 
+# wait_for <url> <tries>: poll every 2s. Found the hard way (Stage 5 finding 1):
+# one-shot checks race container startup — the gateway doesn't START until
+# langchain is healthy, and Langfuse migrates on first boot. An acceptance
+# script must wait for readiness the same way compose depends_on does.
+wait_for() {
+  for _ in $(seq 1 "$2"); do
+    curl -sf "$1" >/dev/null 2>&1 && return 0
+    sleep 2
+  done
+  return 1
+}
+
 echo "=== Observability acceptance pass (plan 002) ==="
 
-echo "--- Stack reachable ---"
-curl -sf "$GATEWAY/healthz" >/dev/null;                          result $? "gateway /healthz"
-curl -sf "$JAEGER/" >/dev/null;                                  result $? "Jaeger UI"
-curl -sf "$PROM/-/ready" >/dev/null;                             result $? "Prometheus ready"
-curl -sf "$LANGFUSE/api/public/health" >/dev/null;               result $? "Langfuse health"
+echo "--- Stack reachable (waiting for readiness, up to ~3 min on first boot) ---"
+wait_for "$GATEWAY/healthz" 60;                                  result $? "gateway /healthz (waits for langchain healthy + dotnet start)"
+wait_for "$JAEGER/" 15;                                          result $? "Jaeger UI"
+wait_for "$PROM/-/ready" 15;                                     result $? "Prometheus ready"
+wait_for "$LANGFUSE/api/public/health" 90;                       result $? "Langfuse health (first boot runs migrations)"
 
 echo "--- Generate traffic (8 requests through the gateway) ---"
 for i in 1 2; do for p in chat/basic chat/rag graph/basic graph/rag; do

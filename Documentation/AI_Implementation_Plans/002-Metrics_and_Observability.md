@@ -503,7 +503,19 @@ Interesting live-mode reading: if g003's answer scores lower than g001's, check 
 
 ### Results log (chronological — paste script output and observations below)
 
-*(awaiting Timothy's runs)*
+#### [2026_07_18] Finding 1 — first acceptance run: 5/10 failed; root cause = the SCRIPT, not the system
+
+**Timothy's run:** first `--obs` boot, script executed immediately after `build.sh` returned → gateway /healthz FAIL, Langfuse health FAIL, criteria (a)/(b-counters)/(c) FAIL; plumbing tiers and Jaeger/Prometheus PASS.
+
+**Diagnosis (the contradiction that cracked it):** Prometheus reported the gateway scrape target UP (in-network) while the host's one-shot `curl localhost:5000/healthz` failed — so the gateway was fine and the host path suspect. Follow-up on Timothy's machine: `docker exec` in-network healthz → `{"status":"ok"}`; then host curl → `200 OK, Server: Kestrel`; `lsof -i :5000` → only docker. Conclusion: **race, not breakage.** `compose up -d` returns before healthchecks complete; `dotnet_server` doesn't even start until langchain reports healthy (20s start_period + ingestion), and Langfuse runs first-boot migrations for a minute+. The script fired one-shot checks and its traffic into a system still assembling itself — so zero requests entered, which cascaded into the (a)/(b)/(c) failures (no requests → no traces, no counters materialized, no generations).
+
+**Also positively established by that run:** dotnet OTel floating packages resolved and compiled (plan risk 3 CLEARED); gateway serves /metrics; both eval plumbing tiers green in-container; AirPlay-on-port-5000 ruled out.
+
+**Fix:** `observability_check.sh` gains `wait_for` retry loops (gateway waits up to 2 min for the dependency chain; Langfuse up to 3 min for migrations) — the same readiness discipline compose `depends_on: service_healthy` encodes, now applied to the test harness itself. plan 001's `acceptance_check.sh` already had this via `wait_healthy`; omitting it here was my authoring error.
+
+**Lesson for the record:** an acceptance script is part of the system it tests — it must wait for readiness, not assume it. "Works when I run it again" is the signature of a racing check.
+
+**Status:** awaiting re-run (no rebuild needed — containers were healthy all along).
 
 ### Known deferred items (carried out of plan 002, not failures)
 
