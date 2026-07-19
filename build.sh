@@ -55,3 +55,7 @@ fi
 # WARNING: This resets Docker Desktop to a fresh install state.
 # It will delete your local container layers, but it destroys the bloat instantly.
 #rm -rf ~/Library/Containers/com.docker.docker
+
+# This also will allow you to reclaim disk space, but it will take a while to rebuild the Docker.raw file.
+#rm ~/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw
+

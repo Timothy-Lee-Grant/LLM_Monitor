@@ -28,7 +28,69 @@ bash scripts/acceptance_check.sh mock   # PASS/FAIL check against the running sy
 bash scripts/observability_check.sh     # PASS/FAIL check of the observability stack (requires --obs)
 ```
 
-The mock mode exists because my development machine can't run heavy models. The entire pipeline (gateway, registry, RAG retrieval, contracts) executes identically in both modes; only the model provider is stubbed. Chat at http://localhost:3000, gateway at http://localhost:5000.
+The mock mode exists because my development machine can't run heavy models. The entire pipeline (gateway, registry, RAG retrieval, contracts) executes identically in both modes; only the model provider is stubbed.
+
+Startup is health-check ordered (pgvector → langchain_service → gateway → OpenWebUI), so the gateway may be unreachable for the first ~30s. Check readiness with `docker compose -p llm_monitor ps` — `langchain_service` should show `(healthy)`.
+
+# Talking to It
+
+All request/response shapes are defined in [CONTRACTS.md](CONTRACTS.md) — the single source of truth for every HTTP boundary.
+
+## Where everything is
+
+| What | URL | Notes |
+|---|---|---|
+| OpenWebUI (chat frontend) | http://localhost:3000 | Pick an `llm-monitor.*` model |
+| Gateway (real path) | http://localhost:5000 | Telemetry middleware → YARP → langchain_service |
+| langchain_service (dev/test path) | http://localhost:5001 | Bypasses the gateway; deleting its port mapping in compose is the production lockdown switch |
+| Jaeger (traces) | http://localhost:16686 | `--obs` only |
+| Prometheus (metrics) | http://localhost:9090 | `--obs` only |
+| Grafana (dashboards) | http://localhost:3001 | `--obs` only; anonymous admin |
+| Langfuse (LLM traces) | http://localhost:3002 | `--obs` only; `timothy@localhost.dev` / `local-dev-password-1` |
+| Ollama | http://localhost:11434 | `live` mode only |
+
+## Sending a message
+
+Through the gateway (the real path — every request here shows up in the telemetry):
+
+```bash
+curl -s -X POST localhost:5000/api/llm/graph/rag \
+  -H "Content-Type: application/json" \
+  -d '{"user_message":"Am I allowed to use scripting tools for automation?"}'
+```
+
+Pipelines: `chat/basic`, `chat/rag`, `graph/basic`, `graph/rag` (same request shape for all; see CONTRACTS.md §1–§4).
+
+Direct to langchain_service, skipping the gateway (dev/test only):
+
+```bash
+curl -s -X POST localhost:5001/graph/rag \
+  -H "Content-Type: application/json" \
+  -d '{"user_message":"hello"}'
+```
+
+Via the OpenAI-compatible surface (what OpenWebUI uses — the model id selects the pipeline):
+
+```bash
+curl -s localhost:5000/v1/models
+curl -s -X POST localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"llm-monitor.graph-rag","messages":[{"role":"user","content":"hello"}]}'
+```
+
+Health check: `curl localhost:5001/healthz` → `{"status": "ok", "mode": "mock"|"live"}`.
+
+## Viewing telemetry (requires --obs)
+
+The short version — find one request in each pillar:
+
+```bash
+docker logs dotnet_server | grep telemetry | tail -1   # structured log line with trace_id
+```
+
+Then take that trace_id to Jaeger (http://localhost:16686) for the cross-service trace tree, Prometheus/Grafana for per-pipeline RED + token metrics (query `llm_requests_total`), and Langfuse (http://localhost:3002) for the fully rendered prompt and retrieved chunks.
+
+The full guided tour — one request traced through all four pillars, plus eval commands and troubleshooting — is in [observability/README.md](observability/README.md).
 
 # Observability
 
