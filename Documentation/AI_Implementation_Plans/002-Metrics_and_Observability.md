@@ -561,6 +561,26 @@ Reported together after re-testing OpenWebUI post-Finding-2: (a) a flood of "suc
 
 **Status:** (a) documented, no action — upstream, cosmetic, self-resolving. (b) fixed and verified end-to-end.
 
+#### [2026_07_18] Finding 4 — Finding 3(a) was wrong: the login burst was a genuine infinite loop, not self-resolving. Fix: stop using WEBUI_AUTH=false.
+
+Timothy reported all three Finding-3 symptoms were still happening after that fix landed. Re-checked with longer observation windows instead of a single snapshot.
+
+**What was actually wrong with Finding 3's diagnosis:** "confirmed: zero repeat bursts in the following 5 minutes" was true of the specific 5-minute window checked, but wrong as a general claim. `docker logs openwebui --since 3m` moments later showed 2,084 more `GET /api/config` / `POST /api/v1/auths/signin` calls, sub-10ms apart, all `200`, still climbing when checked again. `lsof -nP -iTCP:3000` traced the source to the user's own Chrome process holding several persistent loopback connections, each looping. This was a live, ongoing loop the whole time — Finding 3 just got lucky with its sampling window and called it settled. **Lesson inside a lesson: one quiet window is not evidence of "resolved" for anything periodic or bursty — watch across multiple windows, or until a request count actually stops climbing, before calling a symptom self-resolving.**
+
+**Why it loops:** same code branch as Finding 2 — `WEBUI_AUTH=false`'s auto-login path. Every `/api/config` / signin round trip returns a *new* token (different `jti`/`iat` each time, confirmed by comparing two consecutive signin responses), and the frontend's reactive auth check appears to treat that as a fresh state change and re-runs itself — signin → new token → state change → re-check → signin again, forever, with no backoff. Second confirmed bug in the same disabled-auth code path in as many findings; not a coincidence, a pattern.
+
+**The actual fix (this repo):** stop entering that code path at all, in `docker-compose.yaml`:
+- `WEBUI_AUTH=false` → `WEBUI_AUTH=true` — use OpenWebUI's normal auth instead of its auto-login special case.
+- Added `ENABLE_SIGNUP=false` — this is a single-user local dev tool; no reason to leave public signup open (and it closes off ever landing in Finding 2's trap again, since that trap requires the auto-provision path to run at all).
+- Added `WEBUI_SECRET_KEY=local-dev-webui-secret-not-secret` (fixed, plaintext, matching the existing pattern of every other LOCAL-ONLY constant in this file — `SALT`, `NEXTAUTH_SECRET`, etc.). Found and fixed a related latent bug while in here: the image's `start.sh` writes an auto-generated key to `/app/backend/.webui_secret_key`, which is **outside** the mounted `openwebui_data` volume — every container recreation was silently generating a new key and invalidating every session. Not the cause of the loop (that was live within one already-running container), but it would have caused a *different* confusing symptom (get logged out on every `docker compose up`) the next time this container got recreated for any reason.
+- The already-provisioned `admin@localhost` account (created by Finding 2's auto-provision path, password hardcoded to `admin` by OpenWebUI itself in that code path) logs in fine through the normal form now — no new account needed.
+
+**Verified:** `/api/config` now reports `"auth": true, "enable_signup": false`; `POST /api/v1/auths/signin` with `admin@localhost` / `admin` → `200`. 20 seconds of idle backend observation (`docker logs -f`, nothing sent) produced **zero** requests, versus thousands per minute before — the loop's trigger (the auto-login effect) simply never runs anymore. `/v1/chat/completions` through the real gateway path re-verified `200` after the change, confirming the auth-mode switch didn't touch the unrelated chat-plumbing fix from Finding 3(b).
+
+**Answering Timothy's question from two turns ago, updated:** yes, more clearly now — this *was* a project-level architecture issue, not just an upstream bug that happened to fire here. Two independent stability bugs surfacing from the same opt-in, non-default upstream code path in one session is a signal that the path itself was the wrong choice for this project, not that OpenWebUI has two unrelated bugs. `scripts/fix_openwebui_admin.sh` (Finding 2) stays in the repo as a recovery tool in case `WEBUI_AUTH=false` ever gets reintroduced, but the real fix was removing the dependency on that mode entirely rather than continuing to patch around its failure modes one at a time.
+
+**Status:** fixed and verified. Login: `admin@localhost` / `admin`.
+
 ### Known deferred items (carried out of plan 002, not failures)
 
 - **Your authorship slots:** golden rows (15–30), calibration rows (5–10, YOUR scores), rubric anchors — the eval is machinery until these are yours.

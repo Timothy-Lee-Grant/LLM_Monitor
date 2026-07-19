@@ -58,12 +58,8 @@ services:
       start_period: 20s
 
   openwebui:
-    # Pinned (was :main): the WEBUI_AUTH=false auto-provision path has a known
-    # upstream race (see Documentation/AI_Implementation_Plans/002, Finding 2)
-    # that can leave every account stuck at role=pending with no admin to
-    # unblock it. Pinning stops `docker compose pull` from silently swapping
-    # in a different build of that code path; recover with
-    # scripts/fix_openwebui_admin.sh if it happens again.
+    # Pinned (was :main) for reproducibility — see Documentation/AI_Implementation_Plans/002,
+    # Finding 2, for why a floating tag made this bug harder to reason about.
     image: ghcr.io/open-webui/open-webui:0.10.2
     container_name: openwebui
     ports:
@@ -74,7 +70,21 @@ services:
       - OPENAI_API_BASE_URL=http://dotnet_server:8080/v1
       - OPENAI_API_KEY=dummy-key-not-checked
       - ENABLE_OLLAMA_API=false
-      - WEBUI_AUTH=false
+      # WEBUI_AUTH deliberately real (not =false): the auto-login path that
+      # runs when it's false has two confirmed bugs of its own (see
+      # Documentation/AI_Implementation_Plans/002, Findings 2 and 4) — a
+      # signup race that strands every account at role=pending, and an
+      # infinite signin/config retry loop in the frontend. Using normal auth
+      # with a single pre-provisioned local account sidesteps both by never
+      # running that code path. Login: admin@localhost / admin.
+      - WEBUI_AUTH=true
+      - ENABLE_SIGNUP=false
+      # Fixed so sessions survive container recreation (the image's default
+      # behavior — auto-generating this into an unmounted, non-persisted
+      # file on every boot — would silently invalidate every session each
+      # time this container restarts). Local-only constant, same pattern as
+      # the other LOCAL-ONLY secrets below (e.g. SALT, NEXTAUTH_SECRET).
+      - WEBUI_SECRET_KEY=local-dev-webui-secret-not-secret
       - RAG_EMBEDDING_ENGINE=ollama
       - HF_HUB_OFFLINE=1
     volumes:
