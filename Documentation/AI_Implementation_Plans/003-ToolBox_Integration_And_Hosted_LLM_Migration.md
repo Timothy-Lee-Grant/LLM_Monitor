@@ -106,9 +106,32 @@ The pair demonstrates: prompt design, tool calling, eval harness woven into prod
 
 **Remaining open before Stage 3 v2 is final:** (1) confirm Azure OpenAI + the tiered-pipeline design; (2) A2 async strategy — still an implementation-time spike; (3) whether `graph-premium` lands in 003 or is deferred to its own step gate (it's in v2 as Step 5, permissioned separately like every step, so deferring is just "don't grant Step 5 yet").
 
+---
+
+### [Timothy — 2026_07_19_16_48, via conversation] Confirming understanding before formalizing
+
+Timothy restated the design to verify it before agreeing: (1) local functionality is preserved — `LLM_PROVIDER=ollama` keeps the Ollama path alive, because the lack of local hardware is *temporary* and that capability must not be lost; (2) two external pipelines, both on Azure pay-as-you-go: `graph-tools` with only the base agent-loop + tools functionality, and `graph-premium` with the full feature set; (3) he likes this because the project should showcase many feature sets. New question: should we also utilize the free-tier models discussed earlier (Groq/Gemini) — possibly as another pipeline? Asked for the AI's thoughts, in the documentation.
+
+### [AI — 2026_07_19_16_48] Confirmation, and yes to the free-tier pipeline — as a *routing* feature
+
+**Your understanding is correct on all three points**, with one precision worth stating because it affects how we build it:
+
+1. **Ollama preserved — yes.** The `ollama` branch of `ModelFactory` stays, the ollama compose service moves to a `local-live` profile, and when you have hardware again it's an env-var flip. Nothing from plans 001–002 is discarded.
+2. **Two Azure pipelines — yes.** Both `graph-tools` and `graph-premium` call Azure OpenAI pay-as-you-go. `graph-tools` is deliberately minimal (agent loop + tools, hard caps, no auxiliary LLM calls — the documented cost-lean tier). `graph-premium` is the showcase tier (policy gate → RAG → tool loop → sampled async judge).
+3. **The precision:** today, provider selection is *global* (one `LLM_MODE`/`LLM_PROVIDER` env pair controls every pipeline). Your description — different pipelines, same provider now, but potentially different providers later — implies provider becomes a **per-pipeline binding** with the env vars as the default. That's a small factory change (a `provider` parameter on `get_chat_model`, defaulting to the env) but an important architectural shift, and it's exactly what makes your free-tier question easy to say yes to.
+
+**On the free-tier pipeline: yes — and I'd frame it as "model routing," because that reframe is what makes it portfolio-gold rather than clutter.** Reasoning:
+
+- *The feature it showcases is real and named in industry:* multi-provider model routing. With per-pipeline provider binding, the registry becomes a routing table: `graph-free` → Groq free tier (llama-3.3-70b class, tool-calling capable, $0), `graph-tools` → Azure mini-class, `graph-premium` → Azure full path. Same question through three tiers, compared live in Grafana (cost panel) and Langfuse (quality scores) — that is a *demo you can run in an interview*: "here's the same query at $0, at a tenth of a cent, and at premium with eval scoring; here's the observed cost/quality/latency tradeoff." Very few SWE2 candidates can show that.
+- *It has a practical dev benefit:* `graph-free` gives you a **$0 real-model loop for daily development**. Mock mode stays the default for tests, but when you want to exercise genuine tool-calling behavior repeatedly while iterating, you burn Groq's free quota instead of Azure dollars. The Azure pipelines then get exercised deliberately (demos, verification, eval runs) — which is exactly your "don't waste money" posture, engineered into the system instead of relying on discipline.
+- *Guardrails so it stays a supporting act:* the headline of this project is Azure — the resume line is "Azure OpenAI–based tiered pipelines *with multi-provider routing (Groq free-tier) and per-tier cost observability*," not "a Groq project with Azure on the side." Concretely: `graph-free` reuses the same `openai_compat` factory branch from Stage 2 D1 (`ChatOpenAI(base_url=...)` — Groq speaks the OpenAI protocol), so it costs us one registry entry, one env-var pair, and zero new architecture beyond the per-pipeline binding we already need. If Groq's free tier rotates models or rate-limits during a demo, that's survivable — and even *that* is a talking point (why free tiers can't be your production dependency).
+- *What I'd say no to:* a Gemini pipeline as well. Three providers is a routing story; four is maintenance. Gemini stays what it was in D2 — the named fallback if Groq's free tier degrades.
+
+This lands in the plan as **Step 5b** (after the Azure provider exists, before/alongside premium), separately permissioned like everything else — skipping it never blocks the Azure work. Plan below bumped to v3: per-pipeline provider binding added to Step 4, Step 5b added, acceptance criteria and risks updated.
+
 # Stage 3 (Implementation Planning)
 
-### [AI — 2026_07_19_15_46] Implementation Plan v2 (supersedes v1 per Stage 2 discussion; v1 assumed Groq — v2 targets Azure OpenAI and adds the premium tier)
+### [AI — 2026_07_19_16_48] Implementation Plan v3 (v2 + per-pipeline provider binding and the `graph-free` routing pipeline, per Stage 2 discussion of 16_48; v1 assumed Groq-only — superseded)
 
 Ordering rationale: compose plumbing first (everything else needs a reachable toolbox), then discovery, then the lean graph, then the Azure model migration, then the premium tier (separately permissioned), then cost guards/observability, then tests/verification.
 
@@ -135,7 +158,8 @@ Ordering rationale: compose plumbing first (everything else needs a reachable to
 #### Step 4 — Azure OpenAI provider (the Ollama exit)
 
 - Azure side (Timothy, in portal — resume-relevant experience, not automated away): create the Azure OpenAI resource, deploy a cheap chat model (GPT-4o-mini class) and `text-embedding-3-small`, note endpoint + deployment names, set an Azure **budget alert** (e.g. $40/month with email at 50/90%).
-- `ModelFactory.get_chat_model`: add `LLM_PROVIDER` branch — `azure` → `AzureChatOpenAI(azure_deployment=..., temperature=0, max_tokens=LLM_MAX_TOKENS)`; `ollama` branch kept. Add pinned `langchain-openai` to requirements.
+- `ModelFactory.get_chat_model`: add a `provider` parameter (defaults to `LLM_PROVIDER` env — existing callers unchanged) with branches: `azure` → `AzureChatOpenAI(azure_deployment=..., temperature=0, max_tokens=LLM_MAX_TOKENS)`; `openai_compat` → `ChatOpenAI(base_url=..., api_key=..., model=...)` (used by Step 5b); `ollama` branch kept verbatim (hardware-return path). `LLM_MODE=mock` still overrides everything to mocks regardless of provider — mock remains the global dev default. Add pinned `langchain-openai` to requirements.
+- Per-pipeline binding: pipeline construction passes its provider explicitly (`graph-tools`/`graph-premium` → `azure`), making the registry a visible routing table.
 - `get_embedding_model`: `azure` → `AzureOpenAIEmbeddings(azure_deployment=..., dimensions=768)` — pgvector schema unchanged; re-ingestion required (document why: mock and real vectors don't share a space).
 - Compose: ollama moves to `local-live` profile; `live` requires the Azure env vars; `.env.example` documents names; startup fails loudly if `LLM_MODE=live` with missing key.
 - Proof: `LLM_MODE=live LLM_PROVIDER=azure` chat through OpenWebUI returns a real Azure OpenAI answer through the full gateway path.
@@ -145,6 +169,13 @@ Ordering rationale: compose plumbing first (everything else needs a reachable to
 - New builder variant: policy-gate node (single cheap-model classification: allowed/blocked, reviving the retired plan-001 policy prompt) → retrieve → agent/tool loop → respond → **async sampled judge** (configurable sample rate; judge call happens after the response is committed; score written to Langfuse via the existing SDK wiring from plan 002).
 - Register `graph-premium`; document the tier contract next to the registry: lean = no auxiliary LLM calls; premium = policy gate + sampled judge, each with a stated reason.
 - Proof: premium request shows policy-gate span + (when sampled) a judge score attached to the trace in Langfuse; lean request shows neither.
+
+#### Step 5b — `graph-free` pipeline (model routing; separately permissioned)
+
+- One registry entry binding the lean tool-loop graph to `openai_compat` with Groq's endpoint (`GROQ_BASE_URL`, `GROQ_API_KEY`, tool-calling-capable free model, e.g. llama-3.3-70b class — verify current free-tier models/limits at implementation time).
+- Purpose (documented in the registry description): $0 real-model development loop + the multi-provider routing demonstration. Same hard caps as `graph-tools`.
+- Explicit non-goal: no fourth provider. Gemini remains the named fallback if Groq's free tier degrades.
+- Proof: the same tool-demo question answered by `graph-free` (Groq) and `graph-tools` (Azure), both visible with per-pipeline token/cost metrics in Grafana.
 
 #### Step 6 — Cost guards and cost observability
 
@@ -173,7 +204,8 @@ Ordering rationale: compose plumbing first (everything else needs a reachable to
 4. The `current_time` demo succeeds end-to-end through the gateway; premium demos succeed if Step 5 was granted.
 5. No secret in git; live mode without a key fails loudly at startup; Azure budget alert configured.
 6. Adding a toolset to Tool_Box requires zero LLM_Monitor code changes to appear in the agent.
-7. Resume delta is real: the project now truthfully supports "Azure OpenAI (chat + embeddings), LLM tool calling via MCP, cost-tiered pipeline design with eval scoring on production traffic."
+7. Resume delta is real: the project now truthfully supports "Azure OpenAI (chat + embeddings), LLM tool calling via MCP, cost-tiered pipeline design with eval scoring on production traffic, and multi-provider model routing with per-tier cost observability" (routing claim contingent on Step 5b being granted).
+8. The Ollama path still works: `LLM_PROVIDER=ollama` under the `local-live` profile remains runnable (verifiable by inspection/unit test now, end-to-end when hardware returns).
 
 #### Risks
 
@@ -182,7 +214,8 @@ Ordering rationale: compose plumbing first (everything else needs a reachable to
 - **Async/sync integration** (Stage 2 A2): the known unknown; explicitly spiked in Step 3 before deep wiring.
 - **Judge/policy cost creep** (premium tier): bounded by sample rate + cheap judge model; the Step 6 cost panel makes any creep visible immediately.
 - **Sibling-checkout build**: `build: ../Tool_Box` requires both repos side by side on the right branch; documented in README as a prerequisite.
-- **Price/quota drift**: Azure prices and free-credit terms change; verify at implementation time; the provider abstraction keeps exit costs low.
+- **Price/quota drift**: Azure prices, free-credit terms, and Groq's free-tier models/limits all change; verify at implementation time; the provider abstraction keeps exit costs low.
+- **Free-tier reliability** (`graph-free`): rate limits or model rotation can break it without notice — acceptable for a dev/demo tier, never a dependency for the Azure pipelines; its failure modes are themselves a talking point about free tiers in production.
 
 ### Stage 3 Discussion Subsection
 
