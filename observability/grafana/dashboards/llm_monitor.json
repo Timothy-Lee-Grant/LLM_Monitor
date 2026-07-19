@@ -38,9 +38,9 @@
     },
     { "type": "row", "title": "Gateway & scrape health", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
     {
-      "id": 6, "type": "timeseries", "title": "Gateway request rate (req/s) — metric name may drift with OTel semconv; adjust here if empty",
+      "id": 6, "type": "timeseries", "title": "Gateway request rate (req/s)",
       "gridPos": { "h": 7, "w": 12, "x": 0, "y": 17 },
-      "targets": [ { "expr": "sum (rate(http_server_request_duration_seconds_count{job=\"gateway\"}[1m]))", "legendFormat": "gateway" } ]
+      "targets": [ { "expr": "sum (rate({\"http.server.request.duration_seconds_count\", job=\"gateway\"}[1m]))", "legendFormat": "gateway" } ]
     },
     {
       "id": 7, "type": "stat", "title": "Scrape targets up",
