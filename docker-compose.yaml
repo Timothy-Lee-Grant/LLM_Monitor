@@ -58,7 +58,13 @@ services:
       start_period: 20s
 
   openwebui:
-    image: ghcr.io/open-webui/open-webui:main
+    # Pinned (was :main): the WEBUI_AUTH=false auto-provision path has a known
+    # upstream race (see Documentation/AI_Implementation_Plans/002, Finding 2)
+    # that can leave every account stuck at role=pending with no admin to
+    # unblock it. Pinning stops `docker compose pull` from silently swapping
+    # in a different build of that code path; recover with
+    # scripts/fix_openwebui_admin.sh if it happens again.
+    image: ghcr.io/open-webui/open-webui:0.10.2
     container_name: openwebui
     ports:
       - "3000:8080"

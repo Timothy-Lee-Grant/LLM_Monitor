@@ -517,6 +517,34 @@ Interesting live-mode reading: if g003's answer scores lower than g001's, check 
 
 **Status:** awaiting re-run (no rebuild needed — containers were healthy all along).
 
+#### [2026_07_18] Finding 2 — OpenWebUI stuck on "Account Activation Pending", no admin exists to unblock it
+
+**Symptom:** loading `http://localhost:3000` showed "Account Activation Pending — Contact Admin for WebUI Access." with no way in. This is normally solvable from the Admin Panel, but no admin account existed at all.
+
+**Diagnosis:** `openwebui`'s `webui.db` had six `admin@localhost` rows in `user`, every one at `role='pending'` (confirmed via `docker exec openwebui python3 -c "..."` against the sqlite file — no `sqlite3` CLI in the image, so queries went through Python's stdlib `sqlite3` module instead). Timestamps in `docker logs openwebui` showed six `insert_new_auth` calls inside a ~200ms window right after first page load.
+
+**Root cause location — upstream, not this repo:** `WEBUI_AUTH=false` (`docker-compose.yaml`) puts OpenWebUI in "auto-provision a default user" mode. The vendored backend's `signin()` (`open_webui/routers/auths.py`, `elif WEBUI_AUTH == False:` branch) does this on every unauthenticated signin call:
+```python
+if await Users.get_user_by_email(admin_email.lower(), db=db):
+    user = ...                       # existing admin -> just log in
+else:
+    if await Users.has_users(db=db):
+        raise HTTPException(400, ...)  # someone else beat us to it
+    await signup_handler(request, admin_email, admin_password, "User", db=db, source="system")
+    user = ...
+```
+That's a check-then-act (TOCTOU) with no lock and no unique constraint backing it: if several requests arrive before the first one commits its insert, every one of them observes "no admin yet" and creates its own row. None of those rows go through the normal signup path's "first user becomes admin" promotion, so they all land on the default (`pending`) role — and now zero rows are `admin`, so nothing in the UI can approve anyone. The trigger here was almost certainly more than one browser tab/reload hitting the fresh instance at once, which is ordinary usage, not a misconfiguration — the bug is that the backend isn't safe against it. Confirmed this isn't anything in this repo: `grep -rn "signup\|admin@localhost" --include=*.sh --include=*.py --include=*.cs .` (excluding the compose env line) returned nothing — no script here calls the OpenWebUI auth API.
+
+**Fix (this repo, what's actually ours to fix):**
+1. `docker-compose.yaml` — pinned `ghcr.io/open-webui/open-webui` from the floating `:main` tag to `:0.10.2` (the version that was actually running). `:main` meant every `docker compose pull` could silently swap in a different build of the exact code path that has this bug, with no way to know which behavior you'd get. Every other stateful service in this file (`postgres:16-alpine`, `langfuse/langfuse-worker:3`, ...) was already pinned; `openwebui` was the outlier.
+2. `scripts/fix_openwebui_admin.sh` — new idempotent recovery script. Queries `webui.db` for the stuck state (zero `admin` rows, one-or-more `pending admin@localhost` rows); if found, promotes the oldest to `admin` and deletes the rest from both `user` and `auth`; no-ops cleanly if an admin already exists. This is the manual `docker exec ... sqlite3` surgery from the original recovery, turned into a one-command, rerunnable fix instead of something that has to be re-derived by hand (or by an LLM) each time.
+
+**Not fixed, and not going to be:** the race itself lives in OpenWebUI's vendored Python source inside the image, not in this repo. Patching it would mean forking/maintaining a custom OpenWebUI build for one edge case in a dev-only, `WEBUI_AUTH=false` local setup — disproportionate to the problem. The recovery script is the right-sized mitigation; an always-on init container to auto-heal this on every boot was considered and rejected as over-engineering for a failure mode that only bites once, on first-ever boot of a fresh volume.
+
+**Lesson for the record:** "my project has a bug" and "a bug fired inside my project" aren't the same claim — worth distinguishing before reaching for a code fix. The actual bug here is upstream (unpatchable without forking a third-party image); what *was* ours to fix was exposure and reproducibility: an unpinned image tag, and no faster path back to a working state than re-deriving raw SQL by hand. Fixing the parts you actually own, and leaving the vendored bug documented with a workaround, beats either ignoring it or over-correcting into maintaining a fork.
+
+**Status:** fixed and verified — `bash scripts/fix_openwebui_admin.sh` correctly no-ops now that `admin@localhost` holds `role=admin`; `POST /api/v1/auths/signin` returns `200` with `"role":"admin"`.
+
 ### Known deferred items (carried out of plan 002, not failures)
 
 - **Your authorship slots:** golden rows (15–30), calibration rows (5–10, YOUR scores), rubric anchors — the eval is machinery until these are yours.
