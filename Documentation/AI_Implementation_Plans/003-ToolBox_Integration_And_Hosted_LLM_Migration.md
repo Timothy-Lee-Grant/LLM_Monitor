@@ -45,22 +45,9 @@ LLM_MODE=live + LLM_PROVIDER=ollama   → ChatOllama (kept for the day you have 
 LLM_MODE=live + LLM_PROVIDER=openai_compat → ChatOpenAI(base_url=OPENAI_COMPAT_BASE_URL, ...)
 ```
 
-**D2 — Which provider to start with (money).** Current landscape (verify limits at implementation time — free tiers move):
+**D2 — Which provider to start with (money).** Current landscape (verify limits at implementation time — free tiers move): Groq free tier (no card, ~30 req/min, tool calling, $0), Google Gemini free tier ($0, verify quotas), OpenRouter (aggregator, free models rotate), cheapest paid fallbacks (DeepSeek / Gemini Flash-Lite class, ≤$0.30/M input). Initial recommendation: Groq free tier first. **Timothy to decide.**
 
-- **Groq free tier**: no credit card, ~30 req/min / ~1,000 req/day on `llama-3.3-70b-versatile`-class models, very fast, tool calling supported. $0.
-- **Google Gemini free tier**: no credit card, generous daily quota on Flash models, 1M context, tool calling supported; Google cut free quotas in late 2025 so verify. $0.
-- **OpenRouter**: one key routing to many providers including $0 community models; good as an abstraction layer but free models rotate and tool-calling quality varies per model.
-- **Cheapest paid fallbacks** if a free tier's limits bite: DeepSeek or Gemini Flash-Lite class models at roughly $0.30/M input tokens or less — a full day of heavy dev chat is cents.
-
-My recommendation: **Groq free tier first** (a real $0 budget, no card on file means a runaway loop cannot cost anything — the strongest possible cost control), Gemini free tier as the second key for A/B and rate-limit relief. Because of D1, this choice is two env vars, not a commitment. **Timothy to decide.**
-
-**D3 — Embeddings.** Ollama also provided `nomic-embed-text`. Options:
-
-1. **CPU embedding in-container** (e.g. `fastembed` or `sentence-transformers` with a small model): embeddings are tiny compared to LLM inference — they run fine on any laptop CPU. $0, no rate limits, but "no local AI calls" needs interpreting: if the constraint is *no GPU-class hardware*, this works; if it's *the machine can't even run small models*, it doesn't.
-2. **Hosted embeddings**: Gemini's embedding endpoint has a free tier; OpenAI's `text-embedding-3-small` is ~$0.02/M tokens (effectively free at our volume). Adds a network dependency to ingestion and every RAG query.
-3. Keep `DeterministicFakeEmbedding` even in live mode — rejected: live RAG answers would be retrieving on noise; worse than not having RAG.
-
-My recommendation: option 2 (hosted, free tier) for consistency with the "this machine does no inference" posture, with option 1 as the fallback if the free embedding quota is annoying. **Timothy to decide, and to clarify how hard the "no local" constraint is.**
+**D3 — Embeddings.** Options: (1) CPU embedding in-container (fastembed/sentence-transformers — works if "no local AI" means "no GPU-class hardware"); (2) hosted embeddings (Gemini free tier, or OpenAI-class `text-embedding-3-small` at ~$0.02/M — effectively free at our volume); (3) keep DeterministicFakeEmbedding in live — rejected, live RAG would retrieve on noise. Initial recommendation: option 2. **Timothy to decide.**
 
 **D4 — Cost posture for the live request path.** Concretely what "no extra overhead" means in this codebase:
 
@@ -80,11 +67,50 @@ My recommendation: option 2 (hosted, free tier) for consistency with the "this m
 4. Async execution strategy for graph-tools (A2) — I'll investigate both options in Step 3 and present findings, unless you have a preference now.
 5. Confirm: eager tool discovery at startup (A3), `graph-tools` as the new registry id, and the walkthrough doc's compose wiring adopted as-is.
 
+---
+
+### [Timothy — 2026_07_19_15_46, via conversation] Strategic reframe: optimize for Microsoft SWE2
+
+Timothy brought in advice from another conversation reviewing his resume against Microsoft job descriptions. Key points:
+
+1. **"Zero Azure" is the single biggest screener ding.** His resume shows AWS (RDS/EC2) and the word Azure appears nowhere, while he is applying to Microsoft. The cheapest fix: build or redeploy the flagship project on Azure.
+2. **The CoreAI JD's preferred quals map directly onto this plan:** "Azure development," "AI-driven features: prompt design, tool calling, eval harnesses," "data pipelines." Recommendation from that conversation: make the flagship cover all three — Azure OpenAI embeddings, an LLM-powered feature with tool/function calling, and an eval harness for relevance scoring.
+3. **Budget clarified:** "cost sensitive" means "don't waste money," not "$0 only." $40–50/month is acceptable spend toward the goal.
+4. **Cost-lean clarified:** the earlier "no LLM judge overhead" requirement means *at least one pipeline* must be optimized for cost. Other pipelines absolutely can carry per-request LLM overhead (judges, policy gates) when there's a compelling reason.
+5. **Explicit goal statement: get hired at Microsoft as a Software Engineer 2. Optimize the plan for this.**
+
+### [AI — 2026_07_19_15_46] Response: revised decisions and the SWE2-optimized shape
+
+This reframe resolves most of the open decisions, and it changes one big one. Taking them in order:
+
+**D2 RESOLVED — the provider is Azure OpenAI, and it's not close.** With the SWE2-at-Microsoft goal stated explicitly, provider choice stops being a cost question and becomes a resume question. Every live token this project burns should also be buying the keyword "Azure OpenAI" and real experience with the Azure portal, resource provisioning, model deployments (Azure AI Foundry), key management, and Azure cost controls — the exact surface a Microsoft interviewer can probe. Cost check against the budget: GPT-4o-mini-class models run roughly $0.15/M input, $0.60/M output on Azure pay-as-you-go — a heavy dev month (say 5M in / 1M out) is under $2. `text-embedding-3-small` is $0.02/M — pennies. The entire Azure OpenAI side of this plan fits in single-digit dollars per month, leaving nearly all of the $40–50 budget for infrastructure (see plan 004 preview below). Also note: new Azure accounts typically get ~$200 of 30-day credit — verify at signup and use it deliberately.
+
+Architecturally D1 survives intact: `langchain-openai` ships `AzureChatOpenAI` and `AzureOpenAIEmbeddings`, so the factory branch becomes `LLM_PROVIDER=azure` alongside the kept `ollama` branch. Config via `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_API_VERSION`, and *deployment names* (Azure's extra indirection over raw model names — worth understanding, and worth being able to explain in an interview).
+
+**D3 RESOLVED — Azure OpenAI embeddings (`text-embedding-3-small`).** This is precisely what the JD advice named ("swap raw local embeddings for Azure OpenAI embeddings"). Bonus that kills the migration risk from v1: text-embedding-3 models accept a `dimensions` parameter, so we can request 768-dim vectors and **keep the existing pgvector column schema unchanged**. (We still re-ingest, since mock vectors and real vectors don't share a space — but no schema migration.)
+
+**D4 REVISED — tiered pipelines instead of a blanket rule.** Timothy's clarification turns the cost rule into a *design feature*, which is honestly a better interview story than the blanket rule was:
+
+- **`graph-tools` (lean tier):** agent + tool loop only. Hard caps (`recursion_limit`, `max_tokens`), no auxiliary LLM calls, cheapest deployed model. Explicitly documented as the cost-optimized tier.
+- **`graph-premium` (full tier):** policy gate (single cheap-model classification call — this revives the plan-001-retired policy node with a now-compelling reason) → RAG → tool loop → **sampled async LLM-judge scoring** (judge a configurable fraction of responses *after* the response is returned, logging scores to Langfuse — no user-facing latency, bounded cost).
+
+The pair demonstrates: prompt design, tool calling, eval harness woven into production traffic (not just offline), cost-tier product thinking, and per-pipeline cost observability in Grafana. That covers the JD's "AI-driven features" line end to end, and "designing a cost-tiered LLM serving architecture" is a strong SWE2 behavioral/design answer.
+
+**D6 RESOLVED per my lean:** ollama moves to a `local-live` profile, kept for the future-hardware day. `live` now means Azure.
+
+**NEW — plan 004 preview (Azure deployment).** Redeploying the stack *on* Azure is the other half of closing the "zero Azure" gap, but it is deliberately **out of scope for 003** — this plan keeps its shape (tools + hosted models), and deployment gets its own staged plan. Direction to react to now, since it affects 003's choices at the margins:
+
+- Compute: **AKS** (free-tier control plane + one B2s-class node, ~$30/month, deallocate when not demoing) is my lean over Azure Container Apps (~$0 with scale-to-zero) — because Kubernetes/AKS is a heavyweight keyword in Microsoft infra-adjacent JDs, and compose→k8s migration was already identified as a learning goal in `targeted_implementations/002-Containers_And_Orchestration_Skills_For_Microsoft.md`. ACA remains the budget fallback.
+- Around it: Azure Database for PostgreSQL flexible server (pgvector extension) or in-cluster pgvector, Azure Key Vault + managed identity for the secrets story, GitHub Actions CI/CD to Azure, and an Azure **budget alert** capping spend — itself a cost-engineering story.
+- Rough monthly bill either way: Azure OpenAI usage (<$5) + AKS node (~$30, stoppable) or ACA (~$0) — inside the $40–50 envelope with headroom.
+
+**Remaining open before Stage 3 v2 is final:** (1) confirm Azure OpenAI + the tiered-pipeline design; (2) A2 async strategy — still an implementation-time spike; (3) whether `graph-premium` lands in 003 or is deferred to its own step gate (it's in v2 as Step 5, permissioned separately like every step, so deferring is just "don't grant Step 5 yet").
+
 # Stage 3 (Implementation Planning)
 
-### [AI — 2026_07_19_15_35] Implementation Plan v1 (DRAFT — pending Stage 2 decisions above; defaults assumed: Groq, hosted free-tier embeddings, ollama kept under `local-live`, eager discovery)
+### [AI — 2026_07_19_15_46] Implementation Plan v2 (supersedes v1 per Stage 2 discussion; v1 assumed Groq — v2 targets Azure OpenAI and adds the premium tier)
 
-Ordering rationale: compose plumbing first (everything else needs a reachable toolbox), then discovery, then the graph, then the model migration (independent of tools, but verified *through* the tool demo at the end), then cost guards, then tests/verification.
+Ordering rationale: compose plumbing first (everything else needs a reachable toolbox), then discovery, then the lean graph, then the Azure model migration, then the premium tier (separately permissioned), then cost guards/observability, then tests/verification.
 
 #### Step 1 — Compose: toolbox service + wiring
 
@@ -98,58 +124,69 @@ Ordering rationale: compose plumbing first (everything else needs a reachable to
 - New module `app/tools/toolbox_client.py`: `build_toolbox_client()` reading `TOOLBOX_URL` (KeyError if unset — no silent default), `discover_tools()` wrapping the async `get_tools()` for startup use.
 - Proof: inside compose, a one-liner discovery script lists `ping`, `server_info`, `current_time`.
 
-#### Step 3 — `graph-tools` pipeline
+#### Step 3 — `graph-tools` pipeline (lean tier)
 
-- `build_graph` gains a tool-loop variant (`with_tools=True` or a sibling builder): `agent → (conditional: tool_calls?) → tool_node → agent`, `agent → respond` otherwise. `ToolNode(tools)` from `langgraph.prebuilt`; model bound with `.bind_tools(tools)`.
+- `build_graph` gains a tool-loop variant: `agent → (conditional: tool_calls?) → tool_node → agent`, `agent → respond` otherwise. `ToolNode(tools)` from `langgraph.prebuilt`; model bound with `.bind_tools(tools)`.
 - Resolve the async question (Stage 2 A2): spike both `graph.ainvoke` under `asyncio.run` and sync invoke with adapter tools; adopt whichever is cleaner, document why.
-- Set `recursion_limit` on invocation (cost guard, D4).
+- Hard caps: `recursion_limit` on invocation, `max_tokens` on the model — this pipeline is the documented cost-optimized tier.
 - Register `graph-tools` in `pipelines.py` — additive; appears in `/v1/models` automatically; instrumented for free by the registry wrapper.
-- Mock-mode behavior: mock model must be able to emit a scripted tool call (extend `MockChatModel` with an optional scripted-tool-call response, or test the tool node directly — decide during implementation, per the walkthrough doc's note).
+- Mock-mode behavior: mock model must be able to emit a scripted tool call (extend `MockChatModel`, or test the tool node directly — decide during implementation).
 
-#### Step 4 — Hosted model provider (the Ollama exit)
+#### Step 4 — Azure OpenAI provider (the Ollama exit)
 
-- `ModelFactory.get_chat_model`: add `LLM_PROVIDER` branch; `openai_compat` uses `ChatOpenAI(base_url=OPENAI_COMPAT_BASE_URL, api_key=env, model=LLM_MODEL, temperature=0, max_tokens=LLM_MAX_TOKENS)`. Add `langchain-openai` (pinned) to requirements.
-- `get_embedding_model`: per D3 decision (default draft: hosted embedding endpoint behind the same provider switch; embedding dimension config must match the pgvector column — document the migration note if dimension changes from 768).
-- Compose: `live` profile no longer requires ollama; ollama moves to `local-live` profile; new env vars threaded through with no secrets committed (`.env.example` documents the names).
-- Proof: `LLM_MODE=live LLM_PROVIDER=openai_compat` chat through OpenWebUI returns a real Groq-generated answer through the full gateway path.
+- Azure side (Timothy, in portal — resume-relevant experience, not automated away): create the Azure OpenAI resource, deploy a cheap chat model (GPT-4o-mini class) and `text-embedding-3-small`, note endpoint + deployment names, set an Azure **budget alert** (e.g. $40/month with email at 50/90%).
+- `ModelFactory.get_chat_model`: add `LLM_PROVIDER` branch — `azure` → `AzureChatOpenAI(azure_deployment=..., temperature=0, max_tokens=LLM_MAX_TOKENS)`; `ollama` branch kept. Add pinned `langchain-openai` to requirements.
+- `get_embedding_model`: `azure` → `AzureOpenAIEmbeddings(azure_deployment=..., dimensions=768)` — pgvector schema unchanged; re-ingestion required (document why: mock and real vectors don't share a space).
+- Compose: ollama moves to `local-live` profile; `live` requires the Azure env vars; `.env.example` documents names; startup fails loudly if `LLM_MODE=live` with missing key.
+- Proof: `LLM_MODE=live LLM_PROVIDER=azure` chat through OpenWebUI returns a real Azure OpenAI answer through the full gateway path.
 
-#### Step 5 — Cost guards, stated and enforced
+#### Step 5 — `graph-premium` pipeline (full tier; separately permissioned — may be deferred without touching other steps)
 
-- `max_tokens` + `recursion_limit` wired (Steps 3–4) and asserted in a unit test.
-- Write the cost-posture rule into CONTRACTS.md (or a short ADR): no LLM calls on the live request path beyond the agent loop; evals never run against paid/live APIs in CI.
-- Grafana/token metrics already count tokens per pipeline (plan 002) — add a note (or panel) interpreting token counts as cost, so spend is *observable*, not guessed.
+- New builder variant: policy-gate node (single cheap-model classification: allowed/blocked, reviving the retired plan-001 policy prompt) → retrieve → agent/tool loop → respond → **async sampled judge** (configurable sample rate; judge call happens after the response is committed; score written to Langfuse via the existing SDK wiring from plan 002).
+- Register `graph-premium`; document the tier contract next to the registry: lean = no auxiliary LLM calls; premium = policy gate + sampled judge, each with a stated reason.
+- Proof: premium request shows policy-gate span + (when sampled) a judge score attached to the trace in Langfuse; lean request shows neither.
 
-#### Step 6 — Tests
+#### Step 6 — Cost guards and cost observability
+
+- Unit-assert the caps (`max_tokens`, `recursion_limit`) and the tier contract (lean pipeline makes exactly N model calls for a no-tool request).
+- Write the tier rule into CONTRACTS.md: every pipeline declares its tier; nothing joins the lean tier's request path that adds an LLM call.
+- Grafana: token metrics already exist per pipeline (plan 002) — add a cost panel converting tokens → $ using the Azure per-token prices, so spend per pipeline is *observable*. Pair with the Azure budget alert from Step 4.
+- Evals (`eval/`) never run against the paid API in CI — mock or explicit-manual only.
+
+#### Step 7 — Tests
 
 - Integration pytest (compose, mock mode, marked so unit CI skips): `test_toolbox_tools_discovered` (`{ping, server_info, current_time} ⊆ names`), `test_agent_can_call_ping` (`pong: e2e` reaches the final answer).
-- Unit tests: factory returns the right model class per `LLM_MODE`/`LLM_PROVIDER` matrix; loud failure when live without an API key.
+- Unit tests: factory matrix (`LLM_MODE` × `LLM_PROVIDER` → model class), loud failure when live without a key, tier-contract assertions from Step 6.
 - `scripts/acceptance_check.sh`: add toolbox health curl.
 
-#### Step 7 — Live verification (the demo moment)
+#### Step 8 — Live verification (the demo moments)
 
-- Through OpenWebUI on `graph-tools`, live mode: "what time is it on the server?" → agent calls `current_time` and answers with the real server time — an answer the model cannot know without the tool.
-- Record actual token spend for the session from the metrics/Langfuse to confirm the cost posture (expected: $0 on Groq free tier).
+- Through OpenWebUI on `graph-tools`, live mode: "what time is it on the server?" → agent calls `current_time` and answers with real server time — an answer the model cannot know without the tool.
+- On `graph-premium`: a blocked-policy request refuses; a sampled request shows a judge score in Langfuse.
+- Record the session's actual dollar spend from the token metrics + Azure cost view; log it here (expected: cents).
 
 #### Acceptance criteria
 
-1. `docker compose up` (default/mock): toolbox healthy before langchain_service; existing pipelines unaffected; `graph-tools` listed in `/v1/models`.
-2. Mock-mode pytest green, including both toolbox integration tests.
-3. Live mode runs with zero local inference: chat works with only the hosted API reachable, ollama container not running.
-4. The `current_time` demo succeeds end-to-end through the gateway.
-5. No secret in git; live mode without a key fails loudly at startup, not silently mid-request.
-6. Adding a toolset to Tool_Box requires zero LLM_Monitor code changes to appear in the agent (verify by rebuilding toolbox with an extra tool if convenient, or by inspection of the discovery path).
+1. `docker compose up` (default/mock): toolbox healthy before langchain_service; existing pipelines unaffected; new pipelines listed in `/v1/models`.
+2. Mock-mode pytest green, including both toolbox integration tests and the tier-contract tests.
+3. Live mode runs with zero local inference against **Azure OpenAI**; ollama container not running.
+4. The `current_time` demo succeeds end-to-end through the gateway; premium demos succeed if Step 5 was granted.
+5. No secret in git; live mode without a key fails loudly at startup; Azure budget alert configured.
+6. Adding a toolset to Tool_Box requires zero LLM_Monitor code changes to appear in the agent.
+7. Resume delta is real: the project now truthfully supports "Azure OpenAI (chat + embeddings), LLM tool calling via MCP, cost-tiered pipeline design with eval scoring on production traffic."
 
 #### Risks
 
-- **Free-tier drift**: quotas/models change without notice; mitigated by D1's provider abstraction (base URL + key swap) and by mock-default development.
-- **Tool-calling quality on free models**: small/free models sometimes emit malformed tool calls; mitigate by choosing a tool-calling-capable model (llama-3.3-70b class on Groq) and capping the loop.
+- **Azure onboarding friction**: resource creation, model deployment quotas, and API versioning are their own learning curve (that's partly the point); budget a session for it before Step 4 coding.
+- **Tool-calling quality**: mini-class models occasionally emit malformed tool calls; the loop cap bounds the damage; escalate the deployed model only if demos actually suffer.
 - **Async/sync integration** (Stage 2 A2): the known unknown; explicitly spiked in Step 3 before deep wiring.
-- **Embedding dimension migration**: if the hosted embedding model isn't 768-dim, pgvector schema and re-ingestion are affected; surfaced in Step 4 as a checkpoint, not discovered in production.
-- **Sibling-checkout build**: `build: ../Tool_Box` requires both repos checked out side by side on the right branch; documented in README as a prerequisite.
+- **Judge/policy cost creep** (premium tier): bounded by sample rate + cheap judge model; the Step 6 cost panel makes any creep visible immediately.
+- **Sibling-checkout build**: `build: ../Tool_Box` requires both repos side by side on the right branch; documented in README as a prerequisite.
+- **Price/quota drift**: Azure prices and free-credit terms change; verify at implementation time; the provider abstraction keeps exit costs low.
 
 ### Stage 3 Discussion Subsection
 
-*(Discussion of Implementation Plan v1 goes here. The plan above will be revised in place as this conversation proceeds.)*
+*(v1 → v2 changes are recorded in the Stage 2 entries of 2026_07_19_15_46. Discussion of Plan v2 goes here; the plan above will be revised in place as this conversation proceeds.)*
 
 # Stage 4 (Implementation)
 
