@@ -10,6 +10,61 @@ Request flow:
 
 OpenWebUI -> dotnet gateway (telemetry middleware -> YARP reverse proxy) -> langchain_service (Flask) -> pipeline registry -> Ollama / pgvector
 
+```mermaid
+flowchart TD
+    User(["User"]) --> OpenWebUI["OpenWebUI<br/>:3000"]
+    OpenWebUI -->|OpenAI-compatible API| Gateway
+
+    subgraph core["Core path — always on"]
+        Gateway["dotnet_server (gateway)<br/>:5000<br/>Telemetry middleware → YARP"]
+        LangchainService["langchain_service<br/>:5001 (dev/test only)<br/>Flask pipeline registry"]
+        PgVector[("pgvector-service<br/>Postgres + pgvector")]
+        Gateway -->|forwards request,<br/>injects traceparent| LangchainService
+        LangchainService -->|RAG retrieval| PgVector
+    end
+
+    subgraph live["live profile only"]
+        Ollama["ollama<br/>:11434"]
+    end
+    LangchainService -.->|live mode| Ollama
+
+    subgraph tracing["obs profile — tracing"]
+        OtelCollector["otel-collector<br/>:4317 / :4318"]
+        Jaeger["Jaeger<br/>:16686"]
+        OtelCollector --> Jaeger
+    end
+    Gateway -.->|OTLP spans| OtelCollector
+    LangchainService -.->|OTLP spans| OtelCollector
+
+    subgraph metrics["obs profile — metrics"]
+        Prometheus["Prometheus<br/>:9090"]
+        Grafana["Grafana<br/>:3001"]
+        Grafana --> Prometheus
+    end
+    Prometheus -.->|scrapes /metrics| Gateway
+    Prometheus -.->|scrapes /metrics| LangchainService
+
+    subgraph langfuse["obs profile — Langfuse v3"]
+        LangfuseWeb["langfuse-web<br/>:3002"]
+        LangfuseWorker["langfuse-worker"]
+        LangfusePg[("langfuse-postgres")]
+        Clickhouse[("clickhouse")]
+        LangfuseRedis[("langfuse-redis")]
+        Minio[("minio (S3)")]
+        LangfuseWeb --> LangfusePg
+        LangfuseWeb --> Clickhouse
+        LangfuseWeb --> LangfuseRedis
+        LangfuseWeb --> Minio
+        LangfuseWorker --> LangfusePg
+        LangfuseWorker --> Clickhouse
+        LangfuseWorker --> LangfuseRedis
+        LangfuseWorker --> Minio
+    end
+    LangchainService -.->|prompt/completion<br/>via CallbackHandler| LangfuseWeb
+```
+
+Solid arrows are the always-on request path; dashed arrows are profile-gated (`live` or `--obs`) and don't exist unless that profile is running.
+
 The services, each in its own container:
 
 - **dotnet_server** — C# gateway. Custom telemetry middleware logs method, path, status, and latency for every request on the way out, then YARP forwards to the inner network. Auth and rate limiting are designed as future middleware in front of the same forwarder.
