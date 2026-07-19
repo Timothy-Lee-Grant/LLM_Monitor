@@ -581,6 +581,25 @@ Timothy reported all three Finding-3 symptoms were still happening after that fi
 
 **Status:** fixed and verified. Login: `admin@localhost` / `admin`.
 
+#### [2026_07_18] Finding 5 — Finding 4's fix was correct but incomplete: it didn't account for the token it had just invalidated sitting in the browser
+
+Timothy reported the loop was still happening immediately after Finding 4 shipped ("I am STILL GETTING THESE SAME ERRORS!"). Re-checked `docker logs openwebui` live rather than assuming Finding 4 had closed the book.
+
+**First surprise: it wasn't the same loop.** The signin/config spam from Finding 4 was gone (confirmed — no `/api/v1/auths/signin` or `/api/config` calls in the fresh logs). What was still running was a *new* tight loop hitting only `GET /static/favicon-dark.png` (1,932 requests in 30 seconds, one source connection, all `304`). Different endpoint, different signature — worth naming explicitly so it doesn't get conflated with Finding 4's bug in hindsight.
+
+**Server-side logs couldn't explain a client-rendering loop, so this is the first finding in this plan that used a browser directly** (`claude-in-chrome`, loaded via the skill) instead of reasoning from container logs alone:
+- A brand-new, cookie/localStorage-free tab loaded `localhost:3000` cleanly: static login page, one login, one "You're now logged in" toast, static suggested-prompt list, zero console errors, zero request spam over a 20s idle check. This proved Finding 4's backend fix was actually correct — the bug was downstream of the server.
+- Checked `localStorage` in that clean tab: key `token` present, holding a session JWT.
+- Reproduced directly: overwrote `localStorage.token` with a syntactically-valid-but-garbage JWT and reloaded. Result: the exact favicon-spam signature, tapering off over ~10s before the app gave up and fell back cleanly to `/auth`.
+
+**Root cause:** Finding 4 rotated `WEBUI_SECRET_KEY` from an ephemeral, auto-generated-per-boot value to a fixed one (correctly, to fix a different latent bug — see Finding 4). That rotation had a side effect Finding 4 didn't check for: it silently invalidated every JWT already issued and sitting in a browser's `localStorage`, including in tabs Timothy still had open from earlier in the session. Any such tab kept sending its now-invalid token, kept getting rejected, and kept re-rendering/retrying — the favicon refetch is a side effect of the app's re-render/redirect cycle each pass, not the cause. `tabs_context_mcp` (scoped to this session's own automation tab group) couldn't see or close that tab — it was one Timothy had opened manually, outside the tool's reach.
+
+**Fix:** none needed in the repo — Finding 4's code fix was already correct and is what stopped the *signin* loop. The remaining piece was operational, not code: close the stale tab(s) left over from before the `WEBUI_SECRET_KEY` rotation and open a fresh one. Confirmed fully resolved after Timothy did this.
+
+**Lesson for the record:** a fix that invalidates existing client-held state (secrets, tokens, sessions, cache keys) isn't finished at "the server now behaves correctly" — the fastest way to find out whether stale client state is still floating around is to actually open a browser and look, not to keep reasoning from server logs, which by construction can't distinguish "client is in a bad state" from "client isn't calling us at all." This is also the second time in this plan a diagnosis was declared done too early (Finding 4 caught Finding 3 doing this; this finding is Finding 4 doing it in a smaller way) — the pattern across both: verify by watching long enough / from the actual vantage point of the thing that's broken (the browser, here), not by inference from an adjacent system (the server logs, which looked clean).
+
+**Status:** fixed and verified — confirmed resolved by Timothy after closing the stale tab(s) and logging in fresh.
+
 ### Known deferred items (carried out of plan 002, not failures)
 
 - **Your authorship slots:** golden rows (15–30), calibration rows (5–10, YOUR scores), rubric anchors — the eval is machinery until these are yours.
