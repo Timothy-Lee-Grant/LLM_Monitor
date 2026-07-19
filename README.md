@@ -10,6 +10,61 @@ Request flow:
 
 OpenWebUI -> dotnet gateway (telemetry middleware -> YARP reverse proxy) -> langchain_service (Flask) -> pipeline registry -> Ollama / pgvector
 
+```mermaid
+flowchart TD
+    User(["User"]) --> OpenWebUI["OpenWebUI<br/>:3000"]
+    OpenWebUI -->|OpenAI-compatible API| Gateway
+
+    subgraph core["Core path — always on"]
+        Gateway["dotnet_server (gateway)<br/>:5000<br/>Telemetry middleware → YARP"]
+        LangchainService["langchain_service<br/>:5001 (dev/test only)<br/>Flask pipeline registry"]
+        PgVector[("pgvector-service<br/>Postgres + pgvector")]
+        Gateway -->|forwards request,<br/>injects traceparent| LangchainService
+        LangchainService -->|RAG retrieval| PgVector
+    end
+
+    subgraph live["live profile only"]
+        Ollama["ollama<br/>:11434"]
+    end
+    LangchainService -.->|live mode| Ollama
+
+    subgraph tracing["obs profile — tracing"]
+        OtelCollector["otel-collector<br/>:4317 / :4318"]
+        Jaeger["Jaeger<br/>:16686"]
+        OtelCollector --> Jaeger
+    end
+    Gateway -.->|OTLP spans| OtelCollector
+    LangchainService -.->|OTLP spans| OtelCollector
+
+    subgraph metrics["obs profile — metrics"]
+        Prometheus["Prometheus<br/>:9090"]
+        Grafana["Grafana<br/>:3001"]
+        Grafana --> Prometheus
+    end
+    Prometheus -.->|scrapes /metrics| Gateway
+    Prometheus -.->|scrapes /metrics| LangchainService
+
+    subgraph langfuse["obs profile — Langfuse v3"]
+        LangfuseWeb["langfuse-web<br/>:3002"]
+        LangfuseWorker["langfuse-worker"]
+        LangfusePg[("langfuse-postgres")]
+        Clickhouse[("clickhouse")]
+        LangfuseRedis[("langfuse-redis")]
+        Minio[("minio (S3)")]
+        LangfuseWeb --> LangfusePg
+        LangfuseWeb --> Clickhouse
+        LangfuseWeb --> LangfuseRedis
+        LangfuseWeb --> Minio
+        LangfuseWorker --> LangfusePg
+        LangfuseWorker --> Clickhouse
+        LangfuseWorker --> LangfuseRedis
+        LangfuseWorker --> Minio
+    end
+    LangchainService -.->|prompt/completion<br/>via CallbackHandler| LangfuseWeb
+```
+
+Solid arrows are the always-on request path; dashed arrows are profile-gated (`live` or `--obs`) and don't exist unless that profile is running.
+
 The services, each in its own container:
 
 - **dotnet_server** — C# gateway. Custom telemetry middleware logs method, path, status, and latency for every request on the way out, then YARP forwards to the inner network. Auth and rate limiting are designed as future middleware in front of the same forwarder.
@@ -23,10 +78,80 @@ The services, each in its own container:
 ```
 ./build.sh --mode mock        # lightweight, stubbed model provider
 ./build.sh --mode live        # real Ollama models (add --gpu for the GPU compose override)
+./build.sh --mode mock --obs  # either mode + the observability stack (Jaeger, Prometheus, Grafana, Langfuse)
 bash scripts/acceptance_check.sh mock   # PASS/FAIL check against the running system
+bash scripts/observability_check.sh     # PASS/FAIL check of the observability stack (requires --obs)
 ```
 
-The mock mode exists because my development machine can't run heavy models. The entire pipeline (gateway, registry, RAG retrieval, contracts) executes identically in both modes; only the model provider is stubbed. Chat at http://localhost:3000, gateway at http://localhost:5000.
+The mock mode exists because my development machine can't run heavy models. The entire pipeline (gateway, registry, RAG retrieval, contracts) executes identically in both modes; only the model provider is stubbed.
+
+Startup is health-check ordered (pgvector → langchain_service → gateway → OpenWebUI), so the gateway may be unreachable for the first ~30s. Check readiness with `docker compose -p llm_monitor ps` — `langchain_service` should show `(healthy)`.
+
+# Talking to It
+
+All request/response shapes are defined in [CONTRACTS.md](CONTRACTS.md) — the single source of truth for every HTTP boundary.
+
+## Where everything is
+
+| What | URL | Notes |
+|---|---|---|
+| OpenWebUI (chat frontend) | http://localhost:3000 | Pick an `llm-monitor.*` model |
+| Gateway (real path) | http://localhost:5000 | Telemetry middleware → YARP → langchain_service |
+| langchain_service (dev/test path) | http://localhost:5001 | Bypasses the gateway; deleting its port mapping in compose is the production lockdown switch |
+| Jaeger (traces) | http://localhost:16686 | `--obs` only |
+| Prometheus (metrics) | http://localhost:9090 | `--obs` only |
+| Grafana (dashboards) | http://localhost:3001 | `--obs` only; anonymous admin |
+| Langfuse (LLM traces) | http://localhost:3002 | `--obs` only; `timothy@localhost.dev` / `local-dev-password-1` |
+| Ollama | http://localhost:11434 | `live` mode only |
+
+## Sending a message
+
+Through the gateway (the real path — every request here shows up in the telemetry):
+
+```bash
+curl -s -X POST localhost:5000/api/llm/graph/rag \
+  -H "Content-Type: application/json" \
+  -d '{"user_message":"Am I allowed to use scripting tools for automation?"}'
+```
+
+Pipelines: `chat/basic`, `chat/rag`, `graph/basic`, `graph/rag` (same request shape for all; see CONTRACTS.md §1–§4).
+
+Direct to langchain_service, skipping the gateway (dev/test only):
+
+```bash
+curl -s -X POST localhost:5001/graph/rag \
+  -H "Content-Type: application/json" \
+  -d '{"user_message":"hello"}'
+```
+
+Via the OpenAI-compatible surface (what OpenWebUI uses — the model id selects the pipeline):
+
+```bash
+curl -s localhost:5000/v1/models
+curl -s -X POST localhost:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"llm-monitor.graph-rag","messages":[{"role":"user","content":"hello"}]}'
+```
+
+Health check: `curl localhost:5001/healthz` → `{"status": "ok", "mode": "mock"|"live"}`.
+
+## Viewing telemetry (requires --obs)
+
+The short version — find one request in each pillar:
+
+```bash
+docker logs dotnet_server | grep telemetry | tail -1   # structured log line with trace_id
+```
+
+Then take that trace_id to Jaeger (http://localhost:16686) for the cross-service trace tree, Prometheus/Grafana for per-pipeline RED + token metrics (query `llm_requests_total`), and Langfuse (http://localhost:3002) for the fully rendered prompt and retrieved chunks.
+
+The full guided tour — one request traced through all four pillars, plus eval commands and troubleshooting — is in [observability/README.md](observability/README.md).
+
+# Observability
+
+With `--obs`, every request leaves a story: a distributed trace across the C# gateway and Python service (one `traceparent` header stitching both into a single Jaeger tree), RED + token metrics per pipeline in Grafana, the fully rendered prompt and retrieved chunks in Langfuse, and gateway log lines carrying the trace id so logs join to traces. A golden-dataset eval harness (hit@k / MRR plus an LLM-as-judge faithfulness score) runs its deterministic tier in CI behind a self-arming regression gate. Everything is profile-gated: without the flag, none of it runs.
+
+**Startup steps and a guided tour of the telemetry (one request traced through all four pillars): [observability/README.md](observability/README.md).**
 
 # Engineering Decisions
 

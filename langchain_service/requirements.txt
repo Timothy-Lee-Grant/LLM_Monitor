@@ -9,3 +9,16 @@ langchain-postgres
 pgvector
 psycopg[binary,pool]
 gunicorn
+
+# Observability (plan 002 Step 3) — API is mandatory (no-op spans when disabled);
+# SDK/exporter/instrumentation only activate via init_observability().
+opentelemetry-sdk
+opentelemetry-instrumentation-flask
+opentelemetry-exporter-otlp
+prometheus-client
+langfuse
+# langfuse.langchain.CallbackHandler does `import langchain` unconditionally
+# (to branch on langchain.__version__ for its v0/v1 shim) even though every
+# actual symbol it uses comes from langchain-core — langchain-core alone is
+# not enough, this is a hard transitive dependency of the Langfuse integration.
+langchain

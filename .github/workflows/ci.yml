@@ -37,6 +37,29 @@ jobs:
           LLM_MODE: mock
         run: python -m pytest -v
 
+      # ---- eval plumbing tiers (plan 002 Step 9a) ----
+      # Mock/deterministic, zero containers. Scores are meaningless by design;
+      # what CI verifies is that the eval MACHINERY works and hasn't drifted.
+
+      - name: Retrieval eval (plumbing tier, self-arming gate)
+        env:
+          LLM_MODE: mock
+        # The gate arms itself: before a baseline is committed this runs
+        # ungated; the moment eval/baselines/retrieval_plumbing.json lands in
+        # the repo, every CI run enforces it at tolerance 0.0.
+        run: |
+          if [ -f eval/baselines/retrieval_plumbing.json ]; then
+            python -m eval.eval_retrieval --tier plumbing --gate
+          else
+            echo "::notice::no committed baseline yet — running ungated (commit one with --save-baseline to arm the gate)"
+            python -m eval.eval_retrieval --tier plumbing
+          fi
+
+      - name: Judge eval (plumbing tier)
+        env:
+          LLM_MODE: mock
+        run: python -m eval.eval_judge --tier plumbing   # exits 1 if any verdict fails to parse
+
   csharp-build-and-test:
     runs-on: ubuntu-latest
     steps:

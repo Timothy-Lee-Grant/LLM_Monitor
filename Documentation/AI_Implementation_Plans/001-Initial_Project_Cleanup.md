@@ -610,3 +610,15 @@ Two things you should know are *deliberately not solved* by this (so we scope th
 **Verification:** `py_compile` clean; the exact algorithm was simulated end-to-end in my sandbox (first=2 added, second=0 added with no embed call, partial=1 added — pass). For you: `python -m pytest tests/test_ingestion_ids.py -v`, then rebuild and check the ingestion log line across two restarts. Note criterion 4's row-count check in `acceptance_check.sh` still applies unchanged (2 → 2) — this change makes the same invariant hold *cheaper*.
 
 **Contract note:** `add_documents_idempotent`'s return value changed meaning (all ids → added ids). Sole caller (`Ingestion.py`) updated; the method's docstring documents the semantics. No wire contract impact.
+
+#### [AI — 2026_07_12] Found issue 3 — OpenWebUI "No models available" in live mode (criterion 5 blocker)
+
+**Symptom (Timothy):** live build up, but OpenWebUI shows "No models available"; repeated "connected" toasts; logs show `Cannot connect to host langchain_service:8080` every model fetch.
+
+**Diagnosis:** `langchain_service:8080` has never been a valid destination in any version of this system (langchain listens on 5000; 8080 is the *gateway's* port). The URL came from OpenWebUI's **persisted connection config**: `OPENAI_API_BASE_URL` seeds config only on FIRST boot; afterwards the value stored in the `openwebui_data` volume overrides the env var permanently. Timothy's volume predates plan 001, so Step 8's compose change (`dotnet_server:8080`) was silently ignored in favor of a stale saved connection. Classic config-precedence gotcha: environment < persisted state. The "connected" toast spam is a side effect — the frontend re-toasts per socket reconnect while the backend churns on failing model fetches.
+
+**Fix:** (A) edit the saved connection in Admin Settings → Connections to `http://dotnet_server:8080/v1` (keeps data), or (B) `down` + `docker volume rm llm_monitor_openwebui_data` + rebuild so the env var seeds a fresh config (loses OpenWebUI chats/settings, makes compose the single source of truth again). Recommended: A to unblock, B eventually.
+
+**Lesson for the record:** stateful third-party containers can quietly override infrastructure-as-code. When a compose env change appears to have no effect, check whether the app persists its own copy of that setting in a volume.
+
+**Status:** awaiting Timothy's re-test after fix; criterion 5 (and the possible `stream: true` follow-up) still open.

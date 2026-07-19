@@ -1,0 +1,7 @@
+{
+  "_comment": "Gate tolerances (plan 002 Step 7c): how far a metric may drop below its committed baseline before the gate fails. plumbing=0.0 because that tier is deterministic — ANY change is a code regression. quality=0.05 because live embeddings + growing golden set produce small legitimate wobble; tighten as the dataset matures.",
+  "retrieval": {
+    "plumbing": { "tolerance": 0.0 },
+    "quality": { "tolerance": 0.05 }
+  }
+}

@@ -22,14 +22,19 @@ public class TelemetryMiddleware
         await _next(context);
 
         stopwatch.Stop();
+
+        // trace_id joins the LOG pillar to the TRACE pillar: grep this id in the
+        // logs, paste it into Jaeger, land on the exact request's span tree.
+        // Activity is .NET's built-in span representation; ASP.NET Core creates one
+        // per request even without OTel (OTel exports it when enabled).
+        var traceId = Activity.Current?.TraceId.ToString() ?? "none";
+
         _logger.LogInformation(
-            "telemetry method={Method} path={Path} status={StatusCode} elapsed_ms={ElapsedMs}",
+            "telemetry method={Method} path={Path} status={StatusCode} elapsed_ms={ElapsedMs} trace_id={TraceId}",
             context.Request.Method,
             context.Request.Path,
             context.Response.StatusCode,
-            stopwatch.ElapsedMilliseconds);
-
-        // Future (roadmap): emit these as OpenTelemetry spans/metrics instead of
-        // log lines, carrying a trace id that the langchain_service continues.
+            stopwatch.ElapsedMilliseconds,
+            traceId);
     }
 }

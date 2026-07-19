@@ -55,6 +55,8 @@ Reserved future fields (additive, do not reuse these names for anything else):
 | `metadata.model_used` | string | Actual model invoked (`mock-stub-provider` in mock mode). |
 | `metadata.retrieved_sources` | list of string | `source` metadata values of retrieved chunks. Empty list for non-RAG pipelines. |
 | `metadata.latency_ms` | int | End-to-end pipeline execution time. |
+| `metadata.prompt_tokens` | int | *Added 2026_07_12 (plan 002, additive).* Model-reported prompt token count; 0 in mock mode. |
+| `metadata.completion_tokens` | int | *Added 2026_07_12 (plan 002, additive).* Model-reported completion token count; 0 in mock mode. |
 
 ## 3. Canonical Error Response
 

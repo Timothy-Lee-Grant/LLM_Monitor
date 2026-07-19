@@ -18,6 +18,7 @@ import os
 from flask import Flask, jsonify, request
 
 import app.orchestration.pipelines  # noqa: F401 — importing registers all pipelines
+from app.metrics import metrics_payload
 from app.orchestration.registry import PIPELINES, get_pipeline, UnknownPipelineError
 from app.orchestration.contracts import ChatRequest
 
@@ -79,6 +80,15 @@ def create_app() -> Flask:
     @app.route("/healthz", methods=["GET"])
     def healthz():
         return jsonify({"status": "ok", "mode": os.getenv("LLM_MODE", "mock")})
+
+    # ---- Prometheus scrape target (plan 002 Step 4) ----
+    # Always exposed, never gated: PULL model means this costs nothing unless
+    # someone scrapes it (and only the obs profile runs a scraper).
+
+    @app.route("/metrics", methods=["GET"])
+    def metrics():
+        payload, content_type = metrics_payload()
+        return payload, 200, {"Content-Type": content_type}
 
     # ---- OpenAI-compatible surface (CONTRACTS.md §5) ----
 

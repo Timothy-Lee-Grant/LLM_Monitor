@@ -1,0 +1,12 @@
+# Calibration set (plan 002 Step 6). HELD OUT from the judge prompt — never used as few-shot anchors.
+# Purpose: measure judge-vs-human agreement (Step 8 prints the comparison). If the judge disagrees
+# with these human scores wildly, the judge is not trustworthy yet (concepts doc 018 §5.3).
+# Schema: {"id", "question", "context", "model_answer", "human_faithfulness_score" (1-5), "human_rationale"}
+#
+# c001 is an AI-authored EXAMPLE of the shape — replace its score/rationale with YOUR judgment or delete it.
+{"id": "c001", "question": "Am I allowed to use scripting tools?", "context": "Employees are permitted to use local scripting tools for local automation, provided no proprietary source code leaves company assets.", "model_answer": "Yes! You're totally free to use any scripting tools you like for anything at all.", "human_faithfulness_score": 2, "human_rationale": "EXAMPLE (AI-authored — replace with your own judgment): permission claim is supported, but 'any tools for anything at all' drops the proprietary-source-code condition, materially misrepresenting the policy."}
+#
+# TIMOTHY: add 5-10 rows scored BY YOU. The most valuable ones come from real live-mode outputs:
+# run a question through /chat/rag, copy the context+answer here, score it yourself with the rubric,
+# THEN later compare what the judge says. Disagreements are where you either fix the rubric or
+# learn to distrust the judge on that case type.

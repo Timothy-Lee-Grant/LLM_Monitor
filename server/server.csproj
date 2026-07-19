@@ -4,11 +4,25 @@
     <TargetFramework>net11.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- plan 002 Step 9: next `dotnet restore` writes packages.lock.json —
+         commit it, and the floating "*" versions above become reproducible
+         (the resolved-environment pinning policy, closing plan-001 risk 2). -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
     <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
+
+    <!-- Observability (plan 002 Step 2). Versions are floating ("*") on purpose:
+         same no-guessed-pins policy as Python — resolve against the live feed,
+         then lock the resolved versions (packages.lock.json) in Step 9.
+         The Prometheus exporter has historically shipped as prerelease, hence "*-*". -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="*" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="*" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="*" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="*" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="*-*" />
   </ItemGroup>
 
   <!-- SDK-style projects auto-compile every .cs under the project folder.

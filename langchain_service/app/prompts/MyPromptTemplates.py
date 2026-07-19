@@ -1,6 +1,14 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 
+# Prompt versions (plan 002 Step 5c). Bump the version WHENEVER the template
+# text changes — eval scores and traces are tagged with these, so a quality
+# shift is attributable to the exact prompt that caused it. This is the seed
+# of prompt management (Timothy's Stage 1 concern about evolving prompts).
+ASSISTANT_PROMPT_VERSION = "assistant.friendly@1"
+POLICY_CHECKER_PROMPT_VERSION = "policy.checker@1"
+LLM_JUDGE_PROMPT_VERSION = "judge.faithfulness@2"  # @1 was the pre-rubric stub
+
 
 class PromptFactory:
 
@@ -50,14 +58,19 @@ class PromptFactory:
     
     @staticmethod
     def get_llm_judge_prompt() -> ChatPromptTemplate:
-        """
-        Evaluates system outputs for grading metrics.
+        """Faithfulness judge (upgraded plan 002 Step 8; original stub was judge.accuracy@1).
+
+        The rubric is INJECTED as a variable rather than hardcoded here —
+        eval/rubric.md stays the single source of truth for scoring criteria,
+        and rubric edits don't require code changes (they require a rubric
+        version bump instead).
         """
         return ChatPromptTemplate.from_messages([
             ("system", (
-                "You are an expert AI Judge assessing answer accuracy.\n"
-                "Compare the model's response against the target RAG context.\n"
-                "Ooutput a score from 1-5 followed by an objective rationale."
+                "You are an impartial evaluation judge. Apply the rubric below EXACTLY as written.\n\n"
+                "{rubric}\n\n"
+                "CRITICAL: respond with ONLY one line in the format:\n"
+                "<score 1-5>: <one-sentence rationale citing the decisive claim>"
             )),
-            ("user", "Context: {context}\nModel Response: {model_response}")
+            ("user", "Context:\n{context}\n\nModel Response:\n{model_response}")
         ])

@@ -1,0 +1,22 @@
+# Prometheus scrape config (plan 002 Step 1).
+# PULL model: Prometheus calls each service's /metrics on an interval.
+# NOTE: these endpoints appear in Steps 2 (gateway) and 4 (langchain);
+# until then these targets show as DOWN in the Prometheus UI — expected.
+
+global:
+  scrape_interval: 5s   # aggressive for local learning; production is usually 15-60s
+
+scrape_configs:
+  - job_name: "gateway"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["dotnet_server:8080"]
+        labels:
+          service: "gateway"
+
+  - job_name: "langchain_service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["langchain_service:5000"]
+        labels:
+          service: "langchain"

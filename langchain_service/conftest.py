@@ -7,8 +7,11 @@ resolve no matter where pytest is invoked from.
 
 import os
 
-# Before any app import: tests are mock-mode by definition (no containers).
+# Before any app import: tests are mock-mode by definition (no containers),
+# and observability is force-disabled so spans/callbacks are true no-ops
+# regardless of what the developer's shell environment says.
 os.environ["LLM_MODE"] = "mock"
+os.environ["OBSERVABILITY_ENABLED"] = "false"
 
 import pytest
 

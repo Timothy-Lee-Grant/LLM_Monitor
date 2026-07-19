@@ -1,0 +1,51 @@
+{
+  "__comment": "LLM Monitor dashboard (plan 002 Step 4). Row 1: RED (rate/errors/duration). Row 2: AI metrics (tokens). Row 3: gateway + scrape health. Provisioned read-only from this file — edit HERE, not in the UI (the plan-001 persisted-config lesson).",
+  "title": "LLM Monitor",
+  "uid": "llm-monitor-main",
+  "schemaVersion": 39,
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    { "type": "row", "title": "RED — every request-serving system's vital signs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+    {
+      "id": 1, "type": "timeseries", "title": "Request rate by pipeline (req/s)",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
+      "targets": [ { "expr": "sum by (pipeline_id) (rate(llm_requests_total[1m]))", "legendFormat": "{{pipeline_id}}" } ]
+    },
+    {
+      "id": 2, "type": "timeseries", "title": "Error rate by pipeline (errors/s)",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 1 },
+      "targets": [ { "expr": "sum by (pipeline_id) (rate(llm_requests_total{status=\"error\"}[1m]))", "legendFormat": "{{pipeline_id}}" } ]
+    },
+    {
+      "id": 3, "type": "timeseries", "title": "Duration p50 / p95 by pipeline (s)",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 1 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, pipeline_id) (rate(llm_request_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{pipeline_id}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, pipeline_id) (rate(llm_request_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{pipeline_id}}" }
+      ]
+    },
+    { "type": "row", "title": "AI metrics — the second observability layer", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 } },
+    {
+      "id": 4, "type": "timeseries", "title": "Token throughput (tokens/s, by pipeline & direction) — zeros in mock mode",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 },
+      "targets": [ { "expr": "sum by (pipeline_id, direction) (rate(llm_tokens_total[1m]))", "legendFormat": "{{pipeline_id}} {{direction}}" } ]
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Avg tokens per request (5m window)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 },
+      "targets": [ { "expr": "sum by (pipeline_id) (rate(llm_tokens_total[5m])) / sum by (pipeline_id) (rate(llm_requests_total{status=\"success\"}[5m]))", "legendFormat": "{{pipeline_id}}" } ]
+    },
+    { "type": "row", "title": "Gateway & scrape health", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
+    {
+      "id": 6, "type": "timeseries", "title": "Gateway request rate (req/s)",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 17 },
+      "targets": [ { "expr": "sum (rate({\"http.server.request.duration_seconds_count\", job=\"gateway\"}[1m]))", "legendFormat": "gateway" } ]
+    },
+    {
+      "id": 7, "type": "stat", "title": "Scrape targets up",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 17 },
+      "targets": [ { "expr": "up", "legendFormat": "{{job}}" } ]
+    }
+  ]
+}

@@ -6,10 +6,11 @@ services:
     container_name: dotnet_server
     ports:
       - "5000:8080"
-    # YARP's default upstream (appsettings.json) already points at
-    # http://langchain_service:5000/. To retarget without a rebuild, uncomment:
-    # environment:
-    #   - ReverseProxy__Clusters__langchain__Destinations__primary__Address=http://langchain_service:5000/
+    environment:
+      - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}   # consumed from Step 2 on
+      # YARP's default upstream (appsettings.json) already points at
+      # http://langchain_service:5000/. To retarget without a rebuild, uncomment:
+      # - ReverseProxy__Clusters__langchain__Destinations__primary__Address=http://langchain_service:5000/
     depends_on:
       langchain_service:
         condition: service_healthy
@@ -34,6 +35,12 @@ services:
       - "5001:5000"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}   # consumed from Step 3 on
+      # Langfuse SDK config (plan 002 Step 5) — matches the LANGFUSE_INIT_* keys
+      # above; only consulted when OBSERVABILITY_ENABLED=true.
+      - LANGFUSE_HOST=http://langfuse-web:3000
+      - LANGFUSE_PUBLIC_KEY=pk-lf-local-llm-monitor
+      - LANGFUSE_SECRET_KEY=sk-lf-local-llm-monitor
       - LLM_MODE=${LLM_MODE:-mock}
       - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
       - POSTGRES_USER=${POSTGRES_USER:-admin}
@@ -51,7 +58,9 @@ services:
       start_period: 20s
 
   openwebui:
-    image: ghcr.io/open-webui/open-webui:main
+    # Pinned (was :main) for reproducibility — see Documentation/AI_Implementation_Plans/002,
+    # Finding 2, for why a floating tag made this bug harder to reason about.
+    image: ghcr.io/open-webui/open-webui:0.10.2
     container_name: openwebui
     ports:
       - "3000:8080"
@@ -61,13 +70,193 @@ services:
       - OPENAI_API_BASE_URL=http://dotnet_server:8080/v1
       - OPENAI_API_KEY=dummy-key-not-checked
       - ENABLE_OLLAMA_API=false
-      - WEBUI_AUTH=false
+      # WEBUI_AUTH deliberately real (not =false): the auto-login path that
+      # runs when it's false has two confirmed bugs of its own (see
+      # Documentation/AI_Implementation_Plans/002, Findings 2 and 4) — a
+      # signup race that strands every account at role=pending, and an
+      # infinite signin/config retry loop in the frontend. Using normal auth
+      # with a single pre-provisioned local account sidesteps both by never
+      # running that code path. Login: admin@localhost / admin.
+      - WEBUI_AUTH=true
+      - ENABLE_SIGNUP=false
+      # Fixed so sessions survive container recreation (the image's default
+      # behavior — auto-generating this into an unmounted, non-persisted
+      # file on every boot — would silently invalidate every session each
+      # time this container restarts). Local-only constant, same pattern as
+      # the other LOCAL-ONLY secrets below (e.g. SALT, NEXTAUTH_SECRET).
+      - WEBUI_SECRET_KEY=local-dev-webui-secret-not-secret
       - RAG_EMBEDDING_ENGINE=ollama
       - HF_HUB_OFFLINE=1
     volumes:
       - openwebui_data:/app/backend/data
     depends_on:
       - dotnet_server
+
+  # ---- observability stack (plan 002) ----------------------------------
+  # Opt-in via `./build.sh --obs` (compose profile "obs", same mechanism as
+  # "live"). Without the flag, none of these exist — the default system
+  # stays exactly as light as before.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel_collector
+    profiles: ["obs"]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      # exposed to host so locally-run (non-docker) dev processes can export too
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    profiles: ["obs"]
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"   # trace UI: http://localhost:16686
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    profiles: ["obs"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"     # query UI: http://localhost:9090
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    profiles: ["obs"]
+    environment:
+      # local learning setup: no login wall (never do this outside localhost)
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3001:3000"     # dashboards: http://localhost:3001 (3000 is OpenWebUI)
+    depends_on:
+      - prometheus
+
+  # ---- Langfuse v3 (plan 002 Step 5; Timothy chose full v3 stack) --------
+  # Production-real architecture: web + worker apps, postgres (transactional),
+  # clickhouse (OLAP for traces/scores), redis (queue/cache), minio (S3 event
+  # buffer). All obs-profile-gated. Secrets below are LOCAL-ONLY constants.
+  # If these containers crash-loop after a Langfuse image update, diff the env
+  # names against their reference compose:
+  # https://github.com/langfuse/langfuse/blob/main/docker-compose.yml
+
+  langfuse-web:
+    image: langfuse/langfuse:3
+    container_name: langfuse_web
+    profiles: ["obs"]
+    ports:
+      - "3002:3000"     # UI: http://localhost:3002 (3000=OpenWebUI, 3001=Grafana)
+    environment: &langfuse-env
+      - DATABASE_URL=postgresql://langfuse:langfuse_local_pw@langfuse-postgres:5432/langfuse
+      - SALT=local-dev-salt-not-secret
+      - ENCRYPTION_KEY=0000000000000000000000000000000000000000000000000000000000000000
+      - NEXTAUTH_SECRET=local-dev-nextauth-secret
+      - NEXTAUTH_URL=http://localhost:3002
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=clickhouse_local_pw
+      - CLICKHOUSE_CLUSTER_ENABLED=false
+      - REDIS_HOST=langfuse-redis
+      - REDIS_PORT=6379
+      - REDIS_AUTH=redis_local_pw
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=auto
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=minio
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=minio_local_pw
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_EVENT_UPLOAD_PREFIX=events/
+      - TELEMETRY_ENABLED=false
+      # Headless init: org/project/user/API keys exist on first boot — no
+      # click-setup trapped in a volume (the found-issue-3 lesson, again).
+      - LANGFUSE_INIT_ORG_ID=llm-monitor
+      - LANGFUSE_INIT_PROJECT_ID=llm-monitor-local
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=pk-lf-local-llm-monitor
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=sk-lf-local-llm-monitor
+      - LANGFUSE_INIT_USER_EMAIL=timothy@localhost.dev
+      - LANGFUSE_INIT_USER_PASSWORD=local-dev-password-1
+      - LANGFUSE_INIT_USER_NAME=Timothy
+    depends_on:
+      - langfuse-postgres
+      - clickhouse
+      - langfuse-redis
+      - minio
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: langfuse_worker
+    profiles: ["obs"]
+    environment: *langfuse-env
+    depends_on:
+      - langfuse-postgres
+      - clickhouse
+      - langfuse-redis
+      - minio
+
+  langfuse-postgres:
+    # Separate from pgvector-service on purpose: Langfuse migrations/upgrades
+    # must never be able to touch our RAG data. UTC required by Langfuse.
+    image: postgres:16-alpine
+    container_name: langfuse_postgres
+    profiles: ["obs"]
+    environment:
+      - POSTGRES_USER=langfuse
+      - POSTGRES_PASSWORD=langfuse_local_pw
+      - POSTGRES_DB=langfuse
+      - TZ=UTC
+    volumes:
+      - langfuse_pg_data:/var/lib/postgresql/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    profiles: ["obs"]
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=clickhouse_local_pw
+      - TZ=UTC
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  langfuse-redis:
+    image: redis:7-alpine
+    container_name: langfuse_redis
+    profiles: ["obs"]
+    command: ["redis-server", "--requirepass", "redis_local_pw"]
+
+  minio:
+    image: minio/minio:latest
+    container_name: langfuse_minio
+    profiles: ["obs"]
+    # mkdir trick pre-creates the bucket (a bucket is just a top-level dir
+    # in minio's data root) before the server starts.
+    entrypoint: ["sh", "-c", "mkdir -p /data/langfuse && exec minio server /data --address :9000"]
+    environment:
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=minio_local_pw
+    volumes:
+      - minio_data:/data
 
   pgvector-service:
     image: pgvector/pgvector:pg16
@@ -89,3 +278,8 @@ volumes:
   ollama_data:
   pgdata:
   openwebui_data:
+  prometheus_data:
+  grafana_data:
+  langfuse_pg_data:
+  clickhouse_data:
+  minio_data:
