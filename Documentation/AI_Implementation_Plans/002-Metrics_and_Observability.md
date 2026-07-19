@@ -545,6 +545,22 @@ That's a check-then-act (TOCTOU) with no lock and no unique constraint backing i
 
 **Status:** fixed and verified — `bash scripts/fix_openwebui_admin.sh` correctly no-ops now that `admin@localhost` holds `role=admin`; `POST /api/v1/auths/signin` returns `200` with `"role":"admin"`.
 
+#### [2026_07_18] Finding 3 — login/UI burst noise after the Finding 2 fix, and a real "internal error occurred" on every chat send
+
+Reported together after re-testing OpenWebUI post-Finding-2: (a) a flood of "successfully logged in" toasts on page load, suggested-conversation prompts cycling rapidly for a moment, then (b) once the chat box worked, every message sent returned "An internal error occurred."
+
+**(a) Login/config burst — diagnosed, not fixed, and not something to fix here.** `docker logs openwebui --since 5m` showed dozens of `GET /api/config` / `POST /api/v1/auths/update/timezone` calls from four distinct source ports landing inside the same ~150ms window, right at page load — then nothing but the normal one-per-minute `/_app/version.json` poll for the rest of the session. Same root cause as Finding 2: under `WEBUI_AUTH=false`, several of the frontend's components/stores each independently run their own "am I logged in? fetch config, sign in, sync timezone" sequence on mount instead of sharing one auth check, so a page load fires that sequence several times over before everything settles — hence the repeated "logged in" toasts and the New Chat view's suggested-prompt list re-rendering (re-randomizing) on each pass. That logic is in OpenWebUI's bundled frontend JS, not this repo, and it's self-resolving (confirmed: zero repeat bursts in the following 5 minutes) — so per Finding 2's same reasoning, this is upstream noise to document, not to patch.
+
+**(b) Chat internal error — real bug, in this repo, fixed.** `docker logs langchain_service` showed the actual exception: `ModuleNotFoundError: Please install langchain to use the Langfuse langchain integration: 'pip install langchain'`, raised from `langfuse/langchain/CallbackHandler.py` and surfacing through `observability.py:get_langchain_callbacks()` → `pipelines.py:_run_assistant_chain()` → every `/v1/chat/completions` call, 500 every time (confirmed in `dotnet_server`'s YARP logs too: `Received HTTP/1.1 response 500`, twice, matching two chat attempts). Root cause: `langchain_service/requirements.txt` installs `langfuse` plus `langchain-core`/`langchain-community`/`langchain-ollama`/`langgraph`/`langchain-postgres`, but never the top-level `langchain` package. Reading `CallbackHandler.py` directly in the container confirmed `import langchain` is unconditional — used only to read `langchain.__version__` and branch v0/v1 import shims — so `langchain-core` alone doesn't satisfy it; this is a real, undeclared transitive dependency of `langfuse`'s LangChain integration, missed when Step 5 (Langfuse) was added in this same plan.
+
+**Fix (this repo):** added `langchain` to `langchain_service/requirements.txt` (with a comment explaining why it's needed despite `langchain-core` already being present), rebuilt (`docker compose build langchain_service` → resolved `langchain-1.3.14`, compatible with the existing `langchain-core-1.4.9`), recreated the container.
+
+**Verified:** `POST http://localhost:5000/v1/chat/completions` (through the real gateway, not a shortcut straight to langchain_service) → `HTTP 200` with a normal completion body; `docker logs langchain_service` clean of the exception; gateway telemetry line reads `status=200` where it previously read `status=500`.
+
+**Lesson for the record:** this is the same "is it my bug or a vendored one" question as Finding 2, but landed on the opposite side — this time the traceback pointed at `/service/app/observability.py` and `requirements.txt`, both ours, so it got a code fix rather than a documented workaround. Read the traceback's file paths before deciding which category a bug is in; don't assume based on which symptom (login screen vs. chat box) surfaced it.
+
+**Status:** (a) documented, no action — upstream, cosmetic, self-resolving. (b) fixed and verified end-to-end.
+
 ### Known deferred items (carried out of plan 002, not failures)
 
 - **Your authorship slots:** golden rows (15–30), calibration rows (5–10, YOUR scores), rubric anchors — the eval is machinery until these are yours.
