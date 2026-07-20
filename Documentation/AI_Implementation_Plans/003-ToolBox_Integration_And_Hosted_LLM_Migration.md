@@ -318,6 +318,51 @@ docker compose exec langchain_service python -c "from app.tools.toolbox_client i
 
 Paste the tool list here; if the three names appear, Step 2 is verified and Step 3 (`graph-tools` pipeline) awaits your go.
 
+### [Timothy — 2026_07_19_19_10] Step 3 granted
+
+Granted with just "Step 3" — the Step 2 discovery one-liner's output was not pasted. Bookkeeping decision (AI): Step 2's proof is folded into Step 3's verification below, which exercises discovery end-to-end anyway (the service cannot even boot `graph-tools` without a successful discovery). Noted rather than hidden.
+
+### [AI — 2026_07_19_19_10] Step 3 complete — `graph-tools` pipeline (lean tier)
+
+**Changed (6 files):**
+
+1. **`app/models/factory.py`** — `MockChatModel` gains the deterministic **TOOLCALL protocol**: user message `TOOLCALL <tool_name> <json_args?>` → the mock emits exactly that tool call; last message a `ToolMessage` → the mock answers `[mock] tool result: <content>` so tests can assert the *real tool output* survived the loop. Plus `bind_tools()` as identity (the Base default raises `NotImplementedError`, which would crash mock mode at bind time). Neither trigger can fire on existing chat/RAG paths — prior behavior unchanged. This is the "extend MockChatModel" option from the plan, chosen over test-only stubs because it makes the tool loop *demoable* in mock mode through OpenWebUI, not just testable.
+2. **`app/prompts/MyPromptTemplates.py`** — `get_tool_agent_system()` (a concrete `SystemMessage`, not a template — the loop's growing history can't fit fixed template slots) + `TOOL_AGENT_PROMPT_VERSION = "agent.tools@1"` per the prompt-versioning discipline.
+3. **`app/graph/nodes.py`** — `make_tool_agent_node(tools)` (factory closure, async per the Step 2 finding; **accumulates** `prompt_tokens`/`completion_tokens` across loop iterations — the lean tier's cost claim depends on counting every trip, and the default reducer is last-write-wins) and `tool_respond_node` (extract-only twin of `respond_node` — the final AIMessage is already in messages).
+4. **`app/graph/build_graph.py`** — `build_tool_graph(tools)`: `START → agent → (tools_condition) → tools → agent ... → respond → END`. First conditional edge in the codebase; `ToolNode`/`tools_condition` verified present in the resolved langgraph (they live in the `langgraph-prebuilt` dependency — the main wheel doesn't contain them, worth knowing). Separate builder, not a `with_tools` flag: the agent node, wiring, and sync/async model all differ.
+5. **`app/orchestration/pipelines.py`** — small refactor extracting `_initial_state`/`_graph_response` (shared by sync and tool graphs); `_run_tool_graph` via `asyncio.run(graph.ainvoke(...))` (safe: gunicorn sync workers have no running loop); `TOOL_RECURSION_LIMIT` env-tunable, default 8, passed per-invocation in config; `_invoke_config` gains a `prompt_version` parameter so graph-tools traces tag `agent.tools@1` instead of the assistant version; **conditional registration** (see decision below).
+6. **`app/api/FlaskServer.py`** — `/graph/tools` added to the canonical route map. The map is static, so with no toolbox configured the route 404s with the contract's `unknown_pipeline` error — the correct answer for "capability not configured".
+
+**DECISION made during implementation (deviation-level, flagged):** eager discovery at import (Stage 2 A3) collided with honest CI — the unit suite imports `pipelines` with no containers, and `test_registry` asserts the exact pipeline set. Resolution: **registration is conditional on `TOOLBOX_URL` being set.** Compose always sets it → every real deployment discovers eagerly and fails loudly at boot (verified below). Unset (bare pytest) → the capability honestly doesn't exist: absent from registry and `/v1/models`, not silently mocked. All 40 existing unit tests pass untouched because of this.
+
+**DEFERRED to Step 4 (noted, not forgotten):** `max_tokens` is a model-config cap; it lands with the Azure model config where it matters financially. The lean tier's cap in this step is `recursion_limit`.
+
+**Verified by AI (in sandbox, real langgraph + mock model + stand-in async MCP-style tool):**
+
+- Full loop: `TOOLCALL ping {"message": "e2e"}` → message trail `Human → AI(tool_calls) → Tool → AI` → final answer contains `pong: e2e`.
+- No-tool path: plain question routes agent → respond directly, normal mock answer.
+- Recursion cap: `recursion_limit=1` on a tool request raises `GraphRecursionError` — the runaway guard is real.
+- Fail-loud: import with `TOOLBOX_URL` set to a dead endpoint → boot fails with a connection error, per A3.
+- Full unit suite: **40/40 pass** with `TOOLBOX_URL` unset; unregistered `/graph/tools` returns contract-shaped `404 unknown_pipeline`.
+
+**Timothy's verification commands (covers Step 2 + Step 3; rebuild picks up all code):**
+
+```bash
+docker compose up -d --build langchain_service
+curl -s http://localhost:5001/v1/models | python3 -m json.tool | grep -B1 -A2 graph-tools
+# expect: "llm-monitor.graph-tools" listed
+
+curl -s -X POST http://localhost:5001/graph/tools -H 'Content-Type: application/json' \
+  -d '{"user_message": "TOOLCALL ping {\"message\": \"e2e\"}"}' | python3 -m json.tool
+# expect: response contains "pong: e2e" — the REAL toolbox executed over the compose network
+
+curl -s -X POST http://localhost:5001/graph/tools -H 'Content-Type: application/json' \
+  -d '{"user_message": "hello"}' | python3 -m json.tool
+# expect: a normal mock answer (no tool call) — conditional edge's other branch
+```
+
+The middle command is the demo moment in miniature: mock model, but a **real MCP tool call across containers**. If both curls behave, Steps 2+3 are verified; Step 4 (Azure provider) then needs your portal prerequisites from the Stage 3 checklist.
+
 # Stage 5 (Final Results, Testing, Verification)
 
 *(Populated at completion.)*

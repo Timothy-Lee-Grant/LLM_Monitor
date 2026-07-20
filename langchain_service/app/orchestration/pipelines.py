@@ -7,6 +7,7 @@ helpers so the pipeline functions read as intent, not plumbing.
 Replaces OrchestrationLogic.py (original preserved in old_implementations/).
 """
 
+import asyncio
 import os
 import time
 
@@ -14,14 +15,14 @@ from langchain_core.messages import HumanMessage
 
 from app.models.factory import ModelFactory
 from app.observability import get_langchain_callbacks
-from app.prompts.MyPromptTemplates import PromptFactory, ASSISTANT_PROMPT_VERSION
+from app.prompts.MyPromptTemplates import PromptFactory, ASSISTANT_PROMPT_VERSION, TOOL_AGENT_PROMPT_VERSION
 from app.rag.vector_store import vector_store
-from app.graph.build_graph import build_graph
+from app.graph.build_graph import build_graph, build_tool_graph
 from app.orchestration.contracts import ChatRequest, ChatResponse, ChatMetadata
 from app.orchestration.registry import Pipeline, register
 
 
-def _invoke_config(request: ChatRequest, pipeline_id: str) -> dict:
+def _invoke_config(request: ChatRequest, pipeline_id: str, prompt_version: str = ASSISTANT_PROMPT_VERSION) -> dict:
     """LangChain RunnableConfig shared by chains and graphs: Langfuse callbacks
     (empty list = no-op when observability is off) + trace metadata.
 
@@ -37,7 +38,7 @@ def _invoke_config(request: ChatRequest, pipeline_id: str) -> dict:
             "langfuse_user_id": request.user_id,
             "langfuse_tags": [pipeline_id],
             "pipeline_id": pipeline_id,
-            "prompt_version": ASSISTANT_PROMPT_VERSION,
+            "prompt_version": prompt_version,
             "thread_id": None,  # populated when memory (checkpointer) arrives
         },
     }
@@ -112,25 +113,21 @@ def chat_rag(request: ChatRequest) -> ChatResponse:
     return _run_assistant_chain(request, pipeline_id="chat-rag", k=2)
 
 
-def _run_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
-    """Shared body for the two graph pipelines."""
-    started = time.perf_counter()
+def _initial_state(request: ChatRequest) -> dict:
+    """Fresh per-request graph state — shared by sync and tool graphs."""
+    return {
+        "user_id": request.user_id,
+        "desired_model": _resolve_model_name(request),
+        "retrieved_chunks": [],
+        "messages": [HumanMessage(content=request.user_message)],
+        "answer": "",
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+    }
 
-    # config propagates to every node invocation inside the graph — the Langfuse
-    # handler therefore sees retrieve/agent/respond as nested observations (D5).
-    final_state = graph.invoke(
-        {
-            "user_id": request.user_id,
-            "desired_model": _resolve_model_name(request),
-            "retrieved_chunks": [],
-            "messages": [HumanMessage(content=request.user_message)],
-            "answer": "",
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-        },
-        config=_invoke_config(request, pipeline_id),
-    )
 
+def _graph_response(request: ChatRequest, pipeline_id: str, final_state: dict, started: float) -> ChatResponse:
+    """Final-state -> ChatResponse assembly — shared by sync and tool graphs."""
     sources = [doc.metadata.get("source", "unknown") for doc in final_state.get("retrieved_chunks", [])]
 
     return ChatResponse(
@@ -144,6 +141,42 @@ def _run_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
             completion_tokens=final_state.get("completion_tokens", 0),
         ),
     )
+
+
+def _run_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
+    """Shared body for the two graph pipelines."""
+    started = time.perf_counter()
+
+    # config propagates to every node invocation inside the graph — the Langfuse
+    # handler therefore sees retrieve/agent/respond as nested observations (D5).
+    final_state = graph.invoke(_initial_state(request), config=_invoke_config(request, pipeline_id))
+
+    return _graph_response(request, pipeline_id, final_state, started)
+
+
+# Lean-tier runaway guard (plan 003 Step 3): each trip around the tool loop is
+# a model call = money in live mode. 8 allows ~3 tool round-trips (each is
+# agent + tools = 2 graph steps, plus START/respond overhead) — generous for
+# real use, cheap as a failure ceiling. Env-tunable, no rebuild.
+TOOL_RECURSION_LIMIT = int(os.getenv("TOOL_RECURSION_LIMIT", "8"))
+
+
+def _run_tool_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
+    """Tool-loop twin of _run_graph — async because the MCP adapter tools are
+    async-only (Step 2 finding): sync graph.invoke() would raise on the first
+    tool execution. asyncio.run() is safe here: gunicorn's sync workers have
+    no running event loop, so each request gets a private loop for the graph's
+    duration (same reasoning as discover_tools, inverted for request time)."""
+    started = time.perf_counter()
+
+    config = _invoke_config(request, pipeline_id, prompt_version=TOOL_AGENT_PROMPT_VERSION)
+    # recursion_limit rides in the SAME config dict as callbacks/metadata —
+    # LangGraph reads it per-invocation, so the cap needs no graph recompile.
+    config["recursion_limit"] = TOOL_RECURSION_LIMIT
+
+    final_state = asyncio.run(graph.ainvoke(_initial_state(request), config=config))
+
+    return _graph_response(request, pipeline_id, final_state, started)
 
 
 def _resolved_model_label(request: ChatRequest) -> str:
@@ -183,3 +216,36 @@ register(Pipeline(
     description="LangGraph: START -> retrieve (k=4) -> agent -> respond.",
     handler=graph_rag,
 ))
+
+
+# ---- graph-tools (plan 003 Step 3) ----------------------------------------
+# CONDITIONAL registration — the Stage 4 decision reconciling two rules that
+# collided here:
+#   * Eager discovery (Stage 2 A3): tool problems must surface at STARTUP,
+#     not mid-request. So when a toolbox is configured, we discover at import
+#     and a dead toolbox kills the boot — loudly, like pgvector.
+#   * Honest CI: the unit suite runs with no containers at all. Import-time
+#     network discovery would fail every test file that touches pipelines.
+# Resolution: TOOLBOX_URL is the switch. Compose ALWAYS sets it -> in any
+# real deployment the pipeline exists and discovery is eager/fail-loud.
+# Unset (bare pytest) -> the capability honestly does not exist: absent from
+# the registry and /v1/models, not silently mocked. The registry pattern
+# makes this a non-event for every other pipeline.
+if os.getenv("TOOLBOX_URL"):
+    from app.tools.toolbox_client import discover_tools
+
+    _TOOLBOX_TOOLS = discover_tools()
+    _GRAPH_TOOLS = build_tool_graph(_TOOLBOX_TOOLS)
+
+    def graph_tools(request: ChatRequest) -> ChatResponse:
+        return _run_tool_graph(request, pipeline_id="graph-tools", graph=_GRAPH_TOOLS)
+
+    register(Pipeline(
+        id="graph-tools",
+        description=(
+            "LangGraph MCP tool loop (LEAN/cost-optimized tier): agent <-> toolbox, "
+            f"{len(_TOOLBOX_TOOLS)} tools discovered at startup; no auxiliary LLM calls; "
+            f"recursion-capped at {TOOL_RECURSION_LIMIT}."
+        ),
+        handler=graph_tools,
+    ))

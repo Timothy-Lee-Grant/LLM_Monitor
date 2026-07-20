@@ -16,9 +16,10 @@ Growth path (this is the scalability contract for the graph engine):
 """
 
 from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from app.graph.state import ChatState
-from app.graph.nodes import retrieve_node, agent_node, respond_node
+from app.graph.nodes import retrieve_node, agent_node, respond_node, make_tool_agent_node, tool_respond_node
 
 
 def build_graph(with_rag: bool, checkpointer=None):
@@ -38,6 +39,38 @@ def build_graph(with_rag: bool, checkpointer=None):
         g.add_edge(START, "agent")
 
     g.add_edge("agent", "respond")
+    g.add_edge("respond", END)
+
+    return g.compile(checkpointer=checkpointer)
+
+
+def build_tool_graph(tools, checkpointer=None):
+    """Tool-loop variant (plan 003 Step 3) — the "new flow entirely" rung of
+    the growth path documented above, plus this graph's one NEW concept: a
+    CONDITIONAL edge, decided per-run by the model's own output.
+
+        START -> agent -> (emitted tool_calls?) -> tools -> agent -> ...
+                       -> (no tool_calls)       -> respond -> END
+
+    tools_condition (langgraph.prebuilt) inspects the last AIMessage:
+    tool_calls present -> "tools"; absent -> END, which we remap to our
+    respond node. The loop is bounded by recursion_limit at INVOKE time
+    (pipelines.py) — the lean tier's runaway-cost guard lives in config,
+    not topology, so the cap is tunable without recompiling the graph.
+
+    Separate builder (not another build_graph flag): the agent node differs
+    (tool-bound, message-accumulating, async) and the wiring differs; a
+    with_tools flag would make build_graph two graphs wearing one function.
+    """
+    g = StateGraph(ChatState)
+
+    g.add_node("agent", make_tool_agent_node(tools))
+    g.add_node("tools", ToolNode(tools))
+    g.add_node("respond", tool_respond_node)
+
+    g.add_edge(START, "agent")
+    g.add_conditional_edges("agent", tools_condition, {"tools": "tools", END: "respond"})
+    g.add_edge("tools", "agent")
     g.add_edge("respond", END)
 
     return g.compile(checkpointer=checkpointer)

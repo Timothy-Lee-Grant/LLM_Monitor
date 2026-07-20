@@ -1,10 +1,11 @@
+import json
 import os
 import random
 from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.outputs import ChatResult, ChatGeneration
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
 from app.prompts.mock_prompts import MOCK_RESPONSES
 from langchain_ollama import OllamaEmbeddings
@@ -16,9 +17,58 @@ class MockChatModel(BaseChatModel):
     response_pool: list = MOCK_RESPONSES["friendly_assistant"]
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        generation = ChatGeneration(message=AIMessage(content=random.choice(self.response_pool)))
+        generation = ChatGeneration(message=self._respond(messages))
         return ChatResult(generations=[generation])
-    
+
+    def _respond(self, messages) -> AIMessage:
+        """Deterministic tool-call protocol (plan 003 Step 3).
+
+        The mock stays random-pool for normal chat, but supports two extra,
+        deliberately-triggered behaviors so the tool loop is testable without
+        a real (paid) model:
+
+        1. User message "TOOLCALL <tool_name> <json_args?>" -> the mock emits
+           exactly that tool call (empty content, tool_calls populated) — the
+           graph then routes to the ToolNode like a live model would.
+        2. Last message is a ToolMessage (the tool's result coming back
+           around the loop) -> the mock answers with the result embedded, so
+           tests can assert the REAL tool output (e.g. "pong: e2e") survived
+           the full loop into the final answer.
+
+        Neither trigger can fire on the existing chat/RAG paths (their
+        rendered prompts never start with "TOOLCALL ", and they never carry
+        ToolMessages), so prior behavior is unchanged.
+        """
+        last = messages[-1] if messages else None
+
+        if isinstance(last, ToolMessage):
+            return AIMessage(content=f"[mock] tool result: {last.content}")
+
+        if (
+            isinstance(last, HumanMessage)
+            and isinstance(last.content, str)
+            and last.content.startswith("TOOLCALL ")
+        ):
+            parts = last.content.split(maxsplit=2)
+            name = parts[1] if len(parts) > 1 else ""
+            try:
+                args = json.loads(parts[2]) if len(parts) > 2 else {}
+            except json.JSONDecodeError:
+                args = {}
+            return AIMessage(
+                content="",
+                tool_calls=[{"name": name, "args": args, "id": "mock-tool-call-0", "type": "tool_call"}],
+            )
+
+        return AIMessage(content=random.choice(self.response_pool))
+
+    def bind_tools(self, tools, **kwargs):
+        """Accept-and-ignore. BaseChatModel.bind_tools raises NotImplementedError
+        by default, which would crash graph-tools in mock mode at bind time.
+        The mock doesn't need the schemas — the TOOLCALL protocol above decides
+        when to emit calls — so binding is the identity operation."""
+        return self
+
     @property
     def _llm_type(self) -> str:
         return "mock-stub-provider"
