@@ -524,6 +524,31 @@ docker compose exec langchain_service python -m pytest tests/test_cost_guards.py
 
 Remaining: Step 7 (integration tests: toolbox discovery + agent-calls-ping through the registry, factory matrix, acceptance_check line), then Step 8 + concepts doc at the portal session.
 
+### [Timothy — 2026_07_19_21_55] Step 7 granted ("next step")
+
+### [AI — 2026_07_19_21_55] Step 7 complete — the formal test suite
+
+**Changed (3 files):**
+
+1. **New `tests/test_toolbox_integration.py`** (6 tests, integration tier) — self-gating via `skipif(not TOOLBOX_URL)`: inside compose they run for real, in bare CI they SKIP visibly (skips show in output, so the tier's existence is never invisible). Contents: the walkthrough doc's two assertions verbatim (`{ping, server_info, current_time} ⊆ discovered`, agent-calls-ping → `pong: e2e` through the actual registry handler), plus premium full-path + gate (retrieval present on clean requests, absent on blocked), free-tier run with honest `model_used` label, `/v1/models` listing all three tool pipelines. What this tier proves vs the unit suite: the actual wire — MCP over streamable HTTP against the real .NET server.
+2. **New `tests/test_provider_matrix.py`** (14 tests, unit tier, all offline) — every factory branch CALLED (the test_factory lesson: uncalled branches hide NameErrors behind green CI): mock overrides all four provider values; azure chat/embeddings construct with fake keys (deployment threaded, dimensions=768); **parametrized fail-loud test naming each missing Azure variable**; the empty-string-counts-as-missing compose subtlety; compat constructs/refuses-embeddings; unknown provider ValueErrors; and `provider` arg beating env — the routing mechanism itself, asserted.
+3. **`scripts/acceptance_check.sh`** — (a) FIXED a stale assertion Step 7's review caught: `/v1/models` asserted *exactly the 4* original pipelines, which compose deployments now fail — updated to the 7; (b) new plan-003 section: toolbox 200 from inside the network (stdlib-python probe, same idiom as the healthcheck — no curl in python:slim), toolbox NOT reachable from host (lockdown posture as a PASS/FAIL check), and the four tier assertions (tools=pong+no retrieval, premium=pong+retrieval, premium BLOCKME=blocked+no retrieval, free=pong).
+
+**Note (scripts touched):** the standing "don't change scripts" rule was overridden here by the plan itself — Stage 3 Step 7 explicitly includes the acceptance_check line, approved through the Stage 3 sign-off. `build.sh` remains untouched.
+
+**Verified by AI:** unit run = **68 passed, 6 skipped** (the 6 = integration tier gating itself, exactly as designed); `bash -n` clean on the script; the new assert_json expressions validated as python.
+
+**Timothy's verification:**
+
+```bash
+# integration tier for real, inside compose:
+docker compose exec langchain_service python -m pytest tests/test_toolbox_integration.py -v   # 6 passed
+# full acceptance pass:
+bash scripts/acceptance_check.sh mock    # includes the 7 new plan-003 PASS lines
+```
+
+**That closes everything codeable without keys.** Remaining in 003, all gated on your portal batch: Step 8 (live verification: Azure chat through OpenWebUI, `current_time` demo, judge score in Langfuse, Grafana cost row alive, spend reconciliation) and the close-out concepts document (`concepts_documentation/021`: Azure onboarding walkthrough + plan-003 concepts). When you're ready to do the Azure + Groq signups, say so and I'll produce the concepts document FIRST so you can walk through the portal with it open.
+
 # Stage 5 (Final Results, Testing, Verification)
 
 *(Populated at completion.)*
