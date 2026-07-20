@@ -291,6 +291,33 @@ curl -sf http://localhost:8080/health || echo "not reachable from host (EXPECTED
 
 Paste results here; if the four behaviors hold (ordering, healthy, 200 from inside, unreachable from host), Step 1 is verified and Step 2 (discovery client) awaits your go.
 
+### [Timothy — 2026_07_19_18_05] Step 1 VERIFIED; Step 2 granted
+
+All four behaviors held on his machine: `toolbox` container `Up (healthy)` with `8080/tcp` and **no published ports**; `langchain_service` healthy and started after it; in-network probe returned `200`; host curl failed as expected ("not reachable from host — EXPECTED — internal only"). Full `docker compose ps` shows the toolbox coexisting with the obs stack (22h uptime on those) without disturbance. Said "start next step."
+
+### [AI — 2026_07_19_18_05] Step 2 complete — tool discovery client
+
+**Changed:**
+
+1. `langchain_service/requirements.txt`: added `langchain-mcp-adapters==0.3.0` (pinned — the only pin in the file, see debt note below), with a comment explaining why this one is pinned.
+2. New `langchain_service/app/tools/toolbox_client.py` (first inhabitant of the empty `app/tools/` package): `build_toolbox_client()` — `MultiServerMCPClient` with `transport="streamable_http"` and `os.environ["TOOLBOX_URL"]` (KeyError if unset, fail-loudly per D5 style); `discover_tools()` — sync startup-time wrapper via `asyncio.run()`, with a docstring explaining exactly why that's safe at startup and unsafe inside a request path. No `__init__.py`, matching the repo's namespace-package convention.
+
+**Version verification done before pinning (not just "latest"):** downloaded the 0.3.0 wheel and inspected it — (a) `transport: Literal["streamable_http"]` confirmed in `sessions.py`, so the walkthrough's config key is valid for this exact version; (b) dependency constraint is `langchain-core>=1.0,<2.0`, compatible with this repo's (unpinned) resolution.
+
+**Finding — Stage 2 question A2 is now pre-answered.** The 0.3.0 adapter constructs `StructuredTool` with only `coroutine=` (no sync `func=`): the discovered tools are **async-only**. Therefore sync `graph.invoke()` through a `ToolNode` would raise, and the Step 3 spike collapses to a decision: the `graph-tools` pipeline runs via `graph.ainvoke` wrapped in `asyncio.run(...)` at the pipeline boundary. Will still be proven by test in Step 3, but we now know the answer before writing the graph.
+
+**Debt noted (not acted on — out of 003 scope):** `requirements.txt` is otherwise entirely unpinned, which contradicts the repo's own honest-CI lesson. Candidate for a small future plan: pin the full file from a `pip freeze` of a known-good build.
+
+**Timothy's verification commands (rebuild required — requirements changed):**
+
+```bash
+docker compose up -d --build langchain_service
+docker compose exec langchain_service python -c "from app.tools.toolbox_client import discover_tools; print(sorted(t.name for t in discover_tools()))"
+# expect a list including: 'current_time', 'ping', 'server_info'
+```
+
+Paste the tool list here; if the three names appear, Step 2 is verified and Step 3 (`graph-tools` pipeline) awaits your go.
+
 # Stage 5 (Final Results, Testing, Verification)
 
 *(Populated at completion.)*

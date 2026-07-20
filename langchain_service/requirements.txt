@@ -22,3 +22,10 @@ langfuse
 # actual symbol it uses comes from langchain-core — langchain-core alone is
 # not enough, this is a hard transitive dependency of the Langfuse integration.
 langchain
+
+# ToolBox MCP integration (plan 003 Step 2). Pinned per the walkthrough doc's
+# "honest-CI lesson applies to dependencies too" — the adapter API surface
+# (transport literals, async-only tools) was verified against exactly this
+# version. NOTE: it requires langchain-core>=1.0,<2.0; the rest of this file
+# is unpinned (pre-existing debt, flagged in plan 003 Stage 4 Step 2 notes).
+langchain-mcp-adapters==0.3.0
