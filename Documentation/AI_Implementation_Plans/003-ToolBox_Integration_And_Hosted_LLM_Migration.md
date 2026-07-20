@@ -501,6 +501,29 @@ curl -s -X POST http://localhost:5001/graph/free -H 'Content-Type: application/j
 
 Remaining: Step 6 (CONTRACTS tier rule + Grafana cost panel), Step 7 (formal test suite for all of the above), Step 8 + concepts document at the portal session. Your deferred portal batch is unchanged: Azure (the big session) + Groq (5 minutes).
 
+### [Timothy — 2026_07_19_21_30] Step 6 granted ("next step")
+
+### [AI — 2026_07_19_21_30] Step 6 complete — cost guards codified, cost made observable
+
+**Changed (3 files):**
+
+1. **`CONTRACTS.md`** — §4 registry table extended (Tools + Tier columns, the three conditional pipelines); new **§4a Cost-Tier Rules**: lean/free = no LLM calls beyond the capped loop; premium = one gate call + sampled off-clock judge, blocked responses never judged; evals never spend live tokens in CI (already structurally true — CI is `LLM_MODE=mock` throughout — now stated as contract); per-pipeline provider binding with truthful `model_used`. Changing a tier = contract change requiring a plan entry. §6 route table gains the three new routes with their conditional-404 semantics.
+2. **`observability/grafana/dashboards/llm_monitor.json`** — new "Cost" row with two panels driven by **dashboard variables** `price_in_per_1m` / `price_out_per_1m` (defaults 0.15/0.60 = GPT-4o-mini-class; labeled CONFIRM — your 2-minute pricing-page check from the Stage 3 checklist plugs in here, no JSON editing needed): "Est. spend rate by pipeline ($/hour)" (priced token rates) and "Est. spend over dashboard time range ($)" (priced `increase()` — the after-a-demo number, with a panel note to reconcile it against Azure's own Cost analysis view: they should agree, and if they don't, the metrics are lying and THAT is the finding). Documented caveat: one price pair for all pipelines, so graph-free's line reads as "what this traffic WOULD cost on Azure".
+3. **New `tests/test_cost_guards.py`** — CONTRACTS §4a as executable rules, 13 tests: caps default+override, paid constructors carry `max_tokens` (both azure and openai_compat), recursion limit default + actually raising `GraphRecursionError`; **model-call anatomy** via a counting mock — lean no-tool request = exactly 1 call, free tier same, premium conformant = exactly 2 (gate + agent), premium blocked = exactly 1 with retrieval never running, tool loop = 1 call per iteration; judge spawns off-thread at rate 1, never at rate 0, never for blocked responses, and parses via the shared eval parser.
+
+**Verified by AI:** suite now **53/53** (40 existing + 13 new) with `TOOLBOX_URL` unset — the new tests build graphs directly, so they run in bare unit CI. Dashboard JSON re-parsed clean (13 panels).
+
+**Timothy's verification:**
+
+```bash
+docker compose exec langchain_service python -m pytest tests/test_cost_guards.py -v   # 13 passed
+# Grafana (obs profile running): http://localhost:3001 -> LLM Monitor -> Cost row
+# - two price variables at the top; set them from YOUR Azure pricing page
+# - mock traffic shows $0 (honest zeros); the panels come alive at the Step 8 live session
+```
+
+Remaining: Step 7 (integration tests: toolbox discovery + agent-calls-ping through the registry, factory matrix, acceptance_check line), then Step 8 + concepts doc at the portal session.
+
 # Stage 5 (Final Results, Testing, Verification)
 
 *(Populated at completion.)*

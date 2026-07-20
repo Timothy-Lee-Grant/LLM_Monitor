@@ -79,16 +79,43 @@ Reserved future fields (additive, do not reuse these names for anything else):
 
 ## 4. Pipeline Registry IDs
 
-| Pipeline id | Engine | RAG | Description |
-|---|---|---|---|
-| `chat-basic` | LangChain chain | no | Prompt → model → parser. |
-| `chat-rag` | LangChain chain | yes | Retrieval context injected into prompt. |
-| `graph-basic` | LangGraph | no | Graph path, retrieve node skipped. |
-| `graph-rag` | LangGraph | yes | Graph path with retrieve node. |
+| Pipeline id | Engine | RAG | Tools | Tier | Description |
+|---|---|---|---|---|---|
+| `chat-basic` | LangChain chain | no | no | — | Prompt → model → parser. |
+| `chat-rag` | LangChain chain | yes | no | — | Retrieval context injected into prompt. |
+| `graph-basic` | LangGraph | no | no | — | Graph path, retrieve node skipped. |
+| `graph-rag` | LangGraph | yes | no | — | Graph path with retrieve node. |
+| `graph-tools` | LangGraph | no | MCP | **lean** | Agent ⇄ toolbox loop. Conditional: registered only when `TOOLBOX_URL` is set. |
+| `graph-premium` | LangGraph | yes | MCP | **premium** | Policy gate → retrieve → agent ⇄ toolbox → respond; sampled async judge. Conditional, as above. |
+| `graph-free` | LangGraph | no | MCP | **free** | graph-tools topology bound to an OpenAI-compatible free endpoint (`openai_compat`). Conditional, as above. |
 
 OpenAI model-id mapping rule: model id = `llm-monitor.<pipeline_id>`
 (e.g. `llm-monitor.graph-rag`). `/v1/models` is generated from the registry —
 adding a registry entry automatically exposes a new model to OpenWebUI.
+
+### 4a. Cost-Tier Rules (plan 003 Step 6)
+
+Every tool-era pipeline declares a tier, and the tier is a CONTRACT:
+
+1. **lean / free**: the request path contains **no LLM calls beyond the agent
+   loop itself**. No policy gates, no judges, no rerankers — nothing may be
+   added to these pipelines that spends model tokens outside the loop. The
+   loop is capped (`TOOL_RECURSION_LIMIT`, default 8) and model output is
+   capped (`LLM_MAX_TOKENS`, default 1024) at model construction.
+2. **premium**: exactly one policy-gate call ahead of the loop, plus an
+   LLM-judge call for a sampled fraction of responses (`JUDGE_SAMPLE_RATE`,
+   default 0.1) that runs **after the response is returned, off the user's
+   clock, on a background thread**. Blocked responses are never judge-scored.
+3. **Evals never spend live tokens in CI.** CI runs `LLM_MODE=mock`
+   exclusively; quality-tier eval runs against paid providers are explicit,
+   manual, in-container invocations.
+4. Provider binding is per-pipeline (`provider` arg at graph build), with the
+   `LLM_PROVIDER` env as default. Metadata `model_used` must report the model
+   that actually answered.
+
+Changing a pipeline's tier (or adding an LLM call to any request path) is a
+contract change: it requires a new entry in the relevant
+AI_Implementation_Plans document, like every other change to this file.
 
 ## 5. OpenAI-Compatible Surface
 
@@ -109,6 +136,7 @@ langchain_service routes (Flask, port 5000 in-container):
 |---|---|---|
 | `/healthz` | GET | `{"status": "ok", "mode": "mock"\|"live"}` |
 | `/chat/basic`, `/chat/rag`, `/graph/basic`, `/graph/rag` | POST | §1 → §2/§3 |
+| `/graph/tools`, `/graph/premium`, `/graph/free` | POST | §1 → §2/§3; 404 `unknown_pipeline` when the deployment has no `TOOLBOX_URL` (capability honestly absent). |
 | `/v1/models`, `/v1/chat/completions` | GET / POST | §5 |
 
 Access paths:
