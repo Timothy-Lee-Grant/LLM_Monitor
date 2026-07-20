@@ -217,6 +217,47 @@ Ordering rationale: compose plumbing first (everything else needs a reachable to
 - **Price/quota drift**: Azure prices, free-credit terms, and Groq's free-tier models/limits all change; verify at implementation time; the provider abstraction keeps exit costs low.
 - **Free-tier reliability** (`graph-free`): rate limits or model rotation can break it without notice — acceptable for a dev/demo tier, never a dependency for the Azure pipelines; its failure modes are themselves a talking point about free tiers in production.
 
+### [AI — 2026_07_19_17_24] Plan re-review + Timothy-Side Prerequisites Per Step
+
+**Re-review before we start:** I walked the v3 steps once more against the codebase and I still endorse the ordering and content. Two confirmations from that pass: (1) `.env` handling is already correct — the repo's `.gitignore` ignores `.env` and `.env.*` while allowing `.env.example`, so the secrets flow in D5 works with zero gitignore changes; (2) the one step with a hard external dependency on you is Step 1 (Tool_Box must be buildable as a sibling checkout) and Step 4 (Azure resources must exist) — everything else is internal. Your account/signup work can happen in parallel at any time; nothing blocks until the step that consumes it.
+
+The division of labor below is deliberate: everything involving accounts, money, credentials, and the Azure portal is yours — partly because I shouldn't hold your keys, and mostly because *this portal experience is part of the resume value*. Do these yourself, slowly, reading the screens.
+
+#### Prerequisites checklist (do-ahead work, roughly in the order the steps consume it)
+
+**Step 1 (toolbox in compose) — YOUR WORK:**
+- Ensure `Tool_Box` is checked out as a **sibling directory** of `LLM_Monitor` (i.e. `../Tool_Box` resolves from this repo), on the branch containing the streamable-HTTP server (`feature/002-streamable-http` — or merge it to main first if you consider it done; your call, just tell me which branch is authoritative).
+- Verify it builds standalone before we wire it in: `docker build -t toolbox-test ../Tool_Box` succeeds, and a manually-run container answers `GET /health` on 8080. If its Dockerfile lives in a subdirectory or needs build args, note that here in the discussion — Step 1's compose stanza needs to match.
+
+**Step 2 (discovery client) — No work on your end needed.**
+
+**Step 3 (`graph-tools` pipeline) — No work on your end needed.**
+
+**Step 4 (Azure OpenAI provider) — YOUR WORK (the big one; budget an unhurried session):**
+1. Create an Azure account at portal.azure.com (verify the ~$200/30-day new-account credit at signup and note its expiry date — use it deliberately).
+2. Set up spend protection **first, before deploying any model**: Cost Management → create a budget (e.g. $40/month) with email alerts at 50% and 90%.
+3. Create an Azure OpenAI resource (portal will route you through Azure AI Foundry). Region matters for model availability — pick a major US region and check the chat model you want is listed there.
+4. Create two model **deployments** (Azure's indirection layer — a deployment is your named instance of a model): one cheap chat model (GPT-4o-mini class), one `text-embedding-3-small`. Write down the *deployment names you chose* — the code addresses deployments, not model names.
+5. Collect into `LLM_Monitor/.env` (already gitignored — verified 2026_07_19): `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_CHAT_DEPLOYMENT`, `AZURE_OPENAI_EMBED_DEPLOYMENT`. (I'll create the matching `.env.example` with these names, no values, during Step 4.)
+6. Sanity-check with one raw curl to the chat completions endpoint before we integrate — proves keys/endpoint/deployment names independently of our code, and shows you the wire format YARP-style debugging will need later.
+
+**Step 5 (`graph-premium`) — No work on your end needed** (reuses the Step 4 resource and deployments; the policy gate and judge use the same cheap chat deployment).
+
+**Step 5b (`graph-free` routing) — YOUR WORK (5 minutes):**
+- Create a free Groq account at console.groq.com (no credit card), generate an API key, add to `.env`: `GROQ_API_KEY`, plus `GROQ_BASE_URL` (their OpenAI-compatible endpoint) and the tool-calling-capable free model name we settle on at implementation time.
+
+**Step 6 (cost guards/observability) — YOUR WORK (2 minutes, during the step):**
+- Confirm the two per-token prices (input/output) for your chosen Azure chat deployment from your own Azure pricing page, so the Grafana cost panel uses *your* real rates rather than my researched ones.
+
+**Step 7 (tests) — No work on your end needed.**
+
+**Step 8 (live verification) — YOUR WORK (participation, not setup):**
+- Run the demo prompts yourself through OpenWebUI (login: existing admin account) for both tiers, and afterwards open Azure's Cost analysis view to see the actual spend of the session — we log the number here as part of Stage 5 evidence.
+
+**Cross-cutting, before Stage 4 begins:**
+- Confirm which Tool_Box branch is authoritative (Step 1 above).
+- Never paste API keys into our chat or into any file other than `.env`. If a key ever leaks into a tracked file, we rotate it in the portal — history is never rewritten (project rule), so the only safe response to a committed secret is revocation.
+
 ### Stage 3 Discussion Subsection
 
 *(v1 → v2 changes are recorded in the Stage 2 entries of 2026_07_19_15_46. Discussion of Plan v2 goes here; the plan above will be revised in place as this conversation proceeds.)*
