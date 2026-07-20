@@ -264,7 +264,32 @@ The division of labor below is deliberate: everything involving accounts, money,
 
 # Stage 4 (Implementation)
 
-*(Begins after Stage 3 agreement; step-by-step permission from Timothy.)*
+### [Timothy — 2026_07_19_17_45] Step 1 prerequisite complete; permission granted for Step 1
+
+Verified on his machine: `Tool_Box` is a sibling checkout at `/Users/timothygrant/Desktop/projects/Tool_Box`, on branch `feature/002-streamable-http` (branches present: 002, 003-extra-tools, main — 002 is authoritative for this plan). `docker build -t toolbox-test ../Tool_Box` succeeded (multi-stage .NET 10 build, Dockerfile at repo root, curl installed in the runtime stage — the healthcheck's dependency confirmed). The standalone `/health` curl was skipped; compose's healthcheck will prove it in verification. Granted Step 1.
+
+### [AI — 2026_07_19_17_45] Step 1 complete — toolbox service wired into compose
+
+**Changed:** `docker-compose.yaml` only. Three edits, matching the plan and the walkthrough doc exactly:
+
+1. New `toolbox` service: `build.context: ../Tool_Box`, `AllowedHosts=localhost;127.0.0.1;toolbox`, curl healthcheck (10s/3s/5 retries/10s start), **no `ports:`** (internal-only, ADR-008 posture), **not profile-gated** (tools real in mock and live). Commented in the file's house style with the plan-003 reasoning.
+2. `langchain_service.environment` += `TOOLBOX_URL=http://toolbox:8080/mcp` (consumed from Step 2 on; comment flags the `/mcp`-not-`/` trap).
+3. `langchain_service.depends_on` += `toolbox: condition: service_healthy` (toolbox joins pgvector in the must-be-healthy-first set, per Stage 2 A3).
+
+**Notes/deviations:** one addition beyond the walkthrough stanza — `container_name: toolbox`, matching this file's existing convention (every service pins a container_name). Environment written in list form (`- KEY=value`) rather than the walkthrough's map form, again matching the file's existing style. No other deviations.
+
+**Verified by AI:** YAML parses; toolbox has no ports; healthcheck/env/depends_on all present as specified. (Docker itself isn't runnable in my sandbox — runtime proof is yours below.)
+
+**Timothy's verification commands (from LLM_Monitor root):**
+
+```bash
+docker compose up -d --build          # watch: toolbox reaches healthy BEFORE langchain_service starts
+docker compose ps                     # toolbox: (healthy); no published ports on it
+docker compose exec langchain_service python -c "import urllib.request; print(urllib.request.urlopen('http://toolbox:8080/health').status)"   # expect: 200
+curl -sf http://localhost:8080/health || echo "not reachable from host (EXPECTED — internal only)"
+```
+
+Paste results here; if the four behaviors hold (ordering, healthy, 200 from inside, unreachable from host), Step 1 is verified and Step 2 (discovery client) awaits your go.
 
 # Stage 5 (Final Results, Testing, Verification)
 
