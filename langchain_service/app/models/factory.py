@@ -5,7 +5,7 @@ from langchain_ollama import ChatOllama
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.outputs import ChatResult, ChatGeneration
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings, ChatOpenAI
 from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
 from app.prompts.mock_prompts import MOCK_RESPONSES
@@ -59,7 +59,31 @@ class MockChatModel(BaseChatModel):
         Neither trigger can fire on the existing chat/RAG paths (their
         rendered prompts never start with "TOOLCALL ", and they never carry
         ToolMessages), so prior behavior is unchanged.
+
+        Plan 003 Step 5 adds PROMPT-AWARE routing: the mock inspects the
+        SYSTEM message to detect which of the repo's prompts it is serving
+        and answers in that prompt's contract shape, DETERMINISTICALLY (the
+        random pool would make policy/judge tests flaky):
+
+        - policy-checker prompt -> "violated: ..." iff the user message
+          contains the BLOCKME marker (the deliberate test/demo hook),
+          else "conformance: ...".
+        - judge prompt -> a fixed parseable verdict from the MOCK_LLM_JUDGE
+          pool ("<score>: <rationale>").
         """
+        system_text = ""
+        if messages and isinstance(messages[0], SystemMessage) and isinstance(messages[0].content, str):
+            system_text = messages[0].content
+
+        if "violates company guidelines" in system_text:
+            user_text = str(messages[-1].content)
+            if "BLOCKME" in user_text:
+                return AIMessage(content="violated: mock-triggered violation (BLOCKME marker present).")
+            return AIMessage(content="conformance: Message is completely benign.")
+
+        if "impartial evaluation judge" in system_text:
+            return AIMessage(content=MOCK_RESPONSES["llm_judge"][0])
+
         last = messages[-1] if messages else None
 
         if isinstance(last, ToolMessage):

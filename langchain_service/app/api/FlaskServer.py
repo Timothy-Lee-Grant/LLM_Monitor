@@ -37,6 +37,7 @@ PIPELINE_ROUTES = {
     # error, which is exactly the right answer for "capability not
     # configured in this deployment".
     "/graph/tools": "graph-tools",
+    "/graph/premium": "graph-premium",   # plan 003 Step 5; same conditional-404 behavior
 }
 
 

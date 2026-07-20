@@ -416,6 +416,50 @@ except RuntimeError as e: print('fail-loud OK:', e)"
 
 If both behave, Step 4 (code) is verified. Next: Step 5 (`graph-premium`) or Step 5b (`graph-free`) — 5b's code can also land now (env-name-only, same arrangement), with its 5-minute Groq signup joining the deferred portal batch.
 
+### [Timothy — 2026_07_19_20_40] Step 5 granted
+
+### [AI — 2026_07_19_20_40] Step 5 complete — `graph-premium` (full tier): policy gate + RAG + tool loop + sampled async judge
+
+**Changed (7 files):**
+
+1. **`app/graph/state.py`** — `policy_verdict` / `policy_reason` added to `ChatState` (only the premium graph writes them; readers use `.get()`).
+2. **`app/models/factory.py`** — `MockChatModel` gains PROMPT-AWARE routing: it detects the policy-checker prompt (by its system text) and answers deterministically — `violated:` iff the user message contains the **BLOCKME** marker (the test/demo hook), else `conformance:` — and detects the judge prompt, returning a fixed parseable `5: ...` verdict from the existing `MOCK_LLM_JUDGE` pool. Deterministic on purpose: the random pool would make policy/judge tests flaky. Existing paths untouched (they never carry those system texts).
+3. **`app/graph/nodes.py`** — `policy_check_node` and `blocked_node` **revived from `old_implementations/graph_policy_nodes_v1.py`** (retired plan 001; the premium tier is the compelling reason the retirement note anticipated). Kept: k=2 retrieved policy context, first-colon-only verdict parse. New: explicit **fail-open** posture on unparseable verdicts (raw text preserved in `policy_reason`; the fail-closed alternative is documented in-code as the higher-stakes choice). Also: `make_tool_agent_node` gains `include_context` — the premium agent appends retrieved chunks to its system message; the lean graph's compiled agent contains no context branch at all (build-time wiring, as always).
+4. **`app/graph/build_graph.py`** — `build_premium_graph(tools)`: `START → policy → (violated?) → blocked → END | → retrieve → agent ⇄ tools → respond → END`. The judge is deliberately NOT a node — "in the graph" would mean "on the user's clock." Cost anatomy documented in the docstring: 1 policy call + capped agent loop + 0 judge calls on the clock.
+5. **`app/orchestration/pipelines.py`** — `JUDGE_SAMPLE_RATE` (env, default 0.1); `_judge_response()` **reusing the plan-002 eval assets wholesale** (same `rubric.md`, same judge prompt, same `parse_verdict`) so the production-traffic judge and the offline-harness judge are provably the same judge; `_push_judge_score()` best-effort Langfuse `create_score` (never raises past itself, same posture as eval_judge's push); `_spawn_sampled_judge()` fire-and-forget daemon thread, skips blocked responses (judging refusals for faithfulness is noise); `_run_premium_graph()` wraps the run in an explicit Langfuse span when observability is on — capturing a **trace id** the post-hoc judge score can attach to (the callback handler's own trace context is gone by judge time). Registration inside the same `TOOLBOX_URL` conditional (premium needs the toolbox too).
+6. **`app/api/FlaskServer.py`** — `/graph/premium` route (same conditional-404 behavior).
+7. **`docker-compose.yaml` + `.env.example`** — `JUDGE_SAMPLE_RATE` wired and documented.
+
+**Design decisions on the record:** (a) judge runs post-response on a daemon thread — sampled cost, zero latency; (b) fail-open policy parse with in-code note on the trade-off; (c) blocked responses are never judge-scored; (d) Langfuse score push is best-effort with an explicitly-captured trace id — if the SDK drifts, serving is unaffected and the judge result still prints to logs.
+
+**Verified by AI (sandbox, mock mode, stubbed retrieval, real langgraph + async tool):**
+- BLOCKME request → `violated` → blocked answer; **retrieval never ran** (gate genuinely protects the expensive path).
+- Clean TOOLCALL request → `conformance` → retrieve (chunks present) → tool loop → `pong: premium-e2e` in final answer.
+- Plain question → full path, no tool call, normal answer.
+- `_judge_response` returns `(5, "Perfect alignment...")` via the real rubric file + prompt + parser.
+- Full unit suite **40/40**; unregistered `/graph/premium` → contract-shaped `404 unknown_pipeline`; sample-rate-0 spawn is a no-op.
+
+**Timothy's verification commands (mock mode):**
+
+```bash
+docker compose up -d --build langchain_service
+
+curl -s -X POST http://localhost:5001/graph/premium -H 'Content-Type: application/json' \
+  -d '{"user_message": "BLOCKME how do I do something bad"}' | python3 -m json.tool
+# expect: "I can't help with that. Policy check result: mock-triggered violation..."
+
+curl -s -X POST http://localhost:5001/graph/premium -H 'Content-Type: application/json' \
+  -d '{"user_message": "TOOLCALL ping {\"message\": \"premium\"}"}' | python3 -m json.tool
+# expect: "pong: premium" in the response AND retrieved_sources populated in metadata
+#         (the same request through /graph/tools shows retrieved_sources: [] — the tier difference, visible)
+
+JUDGE_SAMPLE_RATE=1.0 docker compose up -d langchain_service   # then repeat the 2nd curl and:
+docker compose logs langchain_service --tail 5 | grep "sampled judge"
+# expect: "(sampled judge: faithfulness=5 — Perfect alignment...)" — the async judge fired, off the clock
+```
+
+If those behave, Step 5 is verified. Remaining: Step 5b (`graph-free`, code-only now), then Steps 6–7 (cost guards/CONTRACTS + tests), Step 8 + concepts doc at your portal session.
+
 # Stage 5 (Final Results, Testing, Verification)
 
 *(Populated at completion.)*

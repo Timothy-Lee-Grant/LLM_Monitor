@@ -9,15 +9,17 @@ Replaces OrchestrationLogic.py (original preserved in old_implementations/).
 
 import asyncio
 import os
+import random
+import threading
 import time
 
 from langchain_core.messages import HumanMessage
 
 from app.models.factory import ModelFactory
-from app.observability import get_langchain_callbacks
+from app.observability import get_langchain_callbacks, observability_enabled
 from app.prompts.MyPromptTemplates import PromptFactory, ASSISTANT_PROMPT_VERSION, TOOL_AGENT_PROMPT_VERSION
 from app.rag.vector_store import vector_store
-from app.graph.build_graph import build_graph, build_tool_graph
+from app.graph.build_graph import build_graph, build_tool_graph, build_premium_graph
 from app.orchestration.contracts import ChatRequest, ChatResponse, ChatMetadata
 from app.orchestration.registry import Pipeline, register
 
@@ -179,6 +181,105 @@ def _run_tool_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatRespon
     return _graph_response(request, pipeline_id, final_state, started)
 
 
+# ---- premium tier: runner + sampled async judge (plan 003 Step 5) ----------
+
+# Fraction of premium responses scored by the LLM judge, post-response.
+# 0.0 = never, 1.0 = every response (useful in tests). Cost is bounded by
+# rate x one cheap judge call; the user's latency is bounded by ZERO because
+# the judge runs on a daemon thread after the response is already returned.
+JUDGE_SAMPLE_RATE = float(os.getenv("JUDGE_SAMPLE_RATE", "0.1"))
+
+
+def _judge_response(user_message: str, answer: str, context: str) -> tuple[int | None, str]:
+    """One judge call: rubric + judged material -> (score 1-5 | None, rationale).
+
+    Reuses the plan-002 eval assets wholesale — same rubric file, same prompt,
+    same first-colon parser — so 'the judge that scores production traffic'
+    and 'the judge in the offline eval harness' are provably the same judge
+    (a calibration story, not just a reuse convenience). Imported lazily:
+    the eval package is not otherwise a runtime dependency."""
+    from eval.eval_judge import parse_verdict, RUBRIC_PATH
+
+    rubric = RUBRIC_PATH.read_text()
+    model = ModelFactory.get_chat_model(os.getenv("LLM_MODEL", "mock"))
+    message = (PromptFactory.get_llm_judge_prompt() | model).invoke(
+        {"rubric": rubric, "context": context, "model_response": answer}
+    )
+    return parse_verdict(message.content)
+
+
+def _push_judge_score(trace_id: str | None, score: int, rationale: str) -> None:
+    """Best-effort Langfuse push, same posture as eval_judge's: never raises
+    past this function, tolerates SDK drift, skips silently when obs is off
+    or the trace id wasn't captured."""
+    if not (observability_enabled() and trace_id):
+        return
+    try:
+        from langfuse import get_client
+        get_client().create_score(
+            name="faithfulness.live",
+            value=float(score),
+            trace_id=trace_id,
+            comment=rationale[:500],
+        )
+    except Exception as exc:  # noqa: BLE001 — observability must never break serving
+        print(f"(judge score push skipped: {type(exc).__name__}: {exc})")
+
+
+def _spawn_sampled_judge(request: ChatRequest, final_state: dict, trace_id: str | None) -> None:
+    """Fire-and-forget judge on a daemon thread for a JUDGE_SAMPLE_RATE
+    fraction of premium responses. Split from _judge_response so tests can
+    call the judge synchronously and assert on it without thread timing."""
+    if random.random() >= JUDGE_SAMPLE_RATE:
+        return
+    if final_state.get("policy_verdict") == "violated":
+        return  # blocked answers are refusals; faithfulness-judging them is noise
+
+    def run() -> None:
+        try:
+            context = "\n\n".join(d.page_content for d in final_state.get("retrieved_chunks", []))
+            score, rationale = _judge_response(request.user_message, final_state.get("answer", ""), context)
+            if score is not None:
+                _push_judge_score(trace_id, score, rationale)
+                print(f"(sampled judge: faithfulness={score} — {rationale[:80]})")
+        except Exception as exc:  # noqa: BLE001 — the judge must NEVER take down serving
+            print(f"(sampled judge skipped: {type(exc).__name__}: {exc})")
+
+    threading.Thread(target=run, daemon=True, name="premium-judge").start()
+
+
+def _run_premium_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
+    """Premium twin of _run_tool_graph, two additions:
+
+    1. When observability is on, the whole graph run is wrapped in an
+       explicit Langfuse span so we hold a TRACE ID after the run — the
+       post-hoc judge score needs something to attach to, and the callback
+       handler's own trace context is gone by the time the judge runs.
+    2. After the response is assembled (user's clock stopped), the sampled
+       judge is spawned off-thread.
+    """
+    started = time.perf_counter()
+
+    config = _invoke_config(request, pipeline_id, prompt_version=TOOL_AGENT_PROMPT_VERSION)
+    config["recursion_limit"] = TOOL_RECURSION_LIMIT
+
+    trace_id = None
+    if observability_enabled():
+        try:
+            from langfuse import get_client
+            with get_client().start_as_current_span(name=f"{pipeline_id}.request") as lf_span:
+                trace_id = lf_span.trace_id
+                final_state = asyncio.run(graph.ainvoke(_initial_state(request), config=config))
+        except ImportError:
+            final_state = asyncio.run(graph.ainvoke(_initial_state(request), config=config))
+    else:
+        final_state = asyncio.run(graph.ainvoke(_initial_state(request), config=config))
+
+    response = _graph_response(request, pipeline_id, final_state, started)
+    _spawn_sampled_judge(request, final_state, trace_id)
+    return response
+
+
 def _resolved_model_label(request: ChatRequest) -> str:
     # Graph nodes construct their model internally, so the pipeline layer derives
     # the label the same way the factory will: mock mode -> the contract's
@@ -248,4 +349,22 @@ if os.getenv("TOOLBOX_URL"):
             f"recursion-capped at {TOOL_RECURSION_LIMIT}."
         ),
         handler=graph_tools,
+    ))
+
+    # graph-premium (plan 003 Step 5) shares the toolbox dependency, so it
+    # lives under the same conditional: no toolbox configured -> no premium.
+    _GRAPH_PREMIUM = build_premium_graph(_TOOLBOX_TOOLS)
+
+    def graph_premium(request: ChatRequest) -> ChatResponse:
+        return _run_premium_graph(request, pipeline_id="graph-premium", graph=_GRAPH_PREMIUM)
+
+    register(Pipeline(
+        id="graph-premium",
+        description=(
+            "LangGraph PREMIUM/full tier: policy gate -> retrieve (k=4) -> MCP tool loop "
+            "-> respond, plus sampled async LLM-judge scoring to Langfuse "
+            f"(rate={JUDGE_SAMPLE_RATE}). Cost anatomy: 1 policy call + capped agent loop "
+            "+ zero judge calls on the user's clock."
+        ),
+        handler=graph_premium,
     ))

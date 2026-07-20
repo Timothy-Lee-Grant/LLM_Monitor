@@ -9,7 +9,7 @@ old_implementations/graph_policy_nodes_v1.py (policy checking is a
 non-goal for plan 001; the prompt remains in PromptFactory).
 """
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, SystemMessage
 
 from app.models.factory import ModelFactory
 from app.prompts.MyPromptTemplates import PromptFactory
@@ -60,7 +60,7 @@ def respond_node(state: ChatState) -> dict:
 
 # ---- tool-loop nodes (plan 003 Step 3) ------------------------------------
 
-def make_tool_agent_node(tools):
+def make_tool_agent_node(tools, include_context: bool = False):
     """Factory: a tool-aware agent node closed over the discovered toolset.
 
     A factory (vs a module-level function like agent_node) because the node
@@ -71,6 +71,12 @@ def make_tool_agent_node(tools):
     ASYNC on purpose: the MCP adapter tools are async-only (Step 2 finding),
     so the whole tool graph runs under ainvoke; a sync node here would work
     but would force LangGraph to thread-hop for no benefit.
+
+    include_context (plan 003 Step 5): the premium graph runs retrieval
+    before the agent; when True, retrieved chunks are appended to the system
+    message (the message-list equivalent of the assistant template's
+    {context} slot). Decided at BUILD time like everything else here — the
+    lean graph's compiled agent contains no context branch at all.
     """
 
     async def tool_agent_node(state: ChatState) -> dict:
@@ -80,12 +86,20 @@ def make_tool_agent_node(tools):
 
         model = ModelFactory.get_chat_model(state["desired_model"]).bind_tools(tools)
 
+        system = PromptFactory.get_tool_agent_system()
+        if include_context:
+            context = "\n\n".join(doc.page_content for doc in state.get("retrieved_chunks", []))
+            if context:
+                system = SystemMessage(content=(
+                    f"{system.content}\n\n"
+                    "Use the following piece of context to help answer the user if relevant:\n"
+                    f"-----\n{context}\n-----"
+                ))
+
         # Raw message-list invocation (not the assistant template): the loop's
         # history (human -> ai(tool_calls) -> tool -> ...) must reach the model
         # intact, and templates can't represent a growing message list.
-        message = await model.ainvoke(
-            [PromptFactory.get_tool_agent_system()] + list(state["messages"])
-        )
+        message = await model.ainvoke([system] + list(state["messages"]))
         prompt_tokens, completion_tokens = extract_usage(message)
 
         # ACCUMULATE tokens across loop iterations (default reducer is
@@ -107,3 +121,48 @@ def tool_respond_node(state: ChatState) -> dict:
     which stashes content in `answer`), so this only extracts — appending
     again would duplicate it."""
     return {"answer": state["messages"][-1].content}
+
+
+# ---- premium-tier nodes (plan 003 Step 5) ----------------------------------
+# Revived from old_implementations/graph_policy_nodes_v1.py (retired plan 001
+# Step 5 as a then-non-goal). The premium tier is the now-compelling reason:
+# one cheap classification call gating the expensive agent loop.
+
+def policy_check_node(state: ChatState) -> dict:
+    """Single cheap-model classification: does the request violate policy?
+
+    Same shape as the v1 node: policy context is RETRIEVED (k=2) rather than
+    hardcoded, the few-shot policy prompt demands "violated: ..." or
+    "conformance: ...", and partition(":") keeps reasons containing colons
+    intact (first-colon-only split, the idiom also used by the judge parser).
+
+    Parse-failure posture — FAIL-OPEN, deliberately: an unparseable verdict
+    from a cheap model treats the request as conformant (with the raw text
+    preserved in policy_reason for the trace) rather than blocking a user on
+    a model hiccup. The opposite (fail-closed) is one line away and would be
+    the right call in a higher-stakes deployment; documented trade-off.
+    """
+    user_msg = state["messages"][-1].content
+
+    policy_chunks = vector_store.find_similar(user_msg, k=2)
+    policy_text = "\n\n".join(d.page_content for d in policy_chunks)
+
+    model = ModelFactory.get_chat_model(state["desired_model"])
+    raw = (PromptFactory.get_policy_checker_prompt() | model).invoke(
+        {"injected_company_policies": policy_text, "user_message": user_msg}
+    )
+
+    verdict, _, reason = raw.content.partition(":")
+    verdict = verdict.strip().lower()
+    if verdict not in ("violated", "conformance"):
+        return {"policy_verdict": "conformance",
+                "policy_reason": f"unparseable-verdict (fail-open): {raw.content[:200]}"}
+    return {"policy_verdict": verdict, "policy_reason": reason.strip()}
+
+
+def blocked_node(state: ChatState) -> dict:
+    """Terminal node for policy-violating requests — the agent loop, retrieval,
+    and every further model call are never reached (that's the point: the
+    gate spends one cheap call to protect the expensive path)."""
+    msg = f"I can't help with that. Policy check result: {state.get('policy_reason', '')}"
+    return {"answer": msg, "messages": [AIMessage(content=msg)]}

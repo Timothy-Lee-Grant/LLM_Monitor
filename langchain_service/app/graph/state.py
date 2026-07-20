@@ -23,3 +23,9 @@ class ChatState(TypedDict):
     # pipeline layer can report it in ChatMetadata (zeros in mock mode).
     prompt_tokens: int
     completion_tokens: int
+    # plan 003 Step 5 (premium tier): the policy gate's parsed verdict
+    # ("violated" | "conformance") and its stated reason. Only the premium
+    # graph writes these; other graphs never touch them (TypedDict keys are
+    # not runtime-enforced, and every reader uses .get()).
+    policy_verdict: str
+    policy_reason: str

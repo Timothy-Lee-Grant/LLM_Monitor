@@ -86,6 +86,7 @@ services:
       # live mode without keys dies with a message, never silently degrades.
       - LLM_PROVIDER=${LLM_PROVIDER:-azure}   # azure | openai_compat | ollama
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-1024}   # output cap: cost guard on paid providers
+      - JUDGE_SAMPLE_RATE=${JUDGE_SAMPLE_RATE:-0.1}   # premium tier: fraction of responses judge-scored (async)
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
       - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
       - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-}
