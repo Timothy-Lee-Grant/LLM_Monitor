@@ -18,7 +18,13 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama_service
-    profiles: ["live"]
+    # Plan 003 Step 4: "live" now means HOSTED models (Azure by default) — it
+    # no longer starts ollama. This profile is the preserved local-inference
+    # path for when capable hardware returns:
+    #   docker compose --profile local-live up -d   (+ LLM_PROVIDER=ollama)
+    # NOTE build.sh's live-mode echo still says "Ollama active" — stale, known,
+    # left alone (scripts untouched in this step; logged as debt in plan 003).
+    profiles: ["local-live"]
     ports:
       - "11434:11434"
     volumes:
@@ -73,6 +79,22 @@ services:
       - LANGFUSE_SECRET_KEY=sk-lf-local-llm-monitor
       - LLM_MODE=${LLM_MODE:-mock}
       - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      # ---- hosted-provider config (plan 003 Step 4) ----------------------
+      # Values live in .env (gitignored; names documented in .env.example).
+      # ${VAR:-} passes unset vars through as EMPTY strings — the factory's
+      # _require_env treats empty as missing and fails LOUDLY at startup, so
+      # live mode without keys dies with a message, never silently degrades.
+      - LLM_PROVIDER=${LLM_PROVIDER:-azure}   # azure | openai_compat | ollama
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-1024}   # output cap: cost guard on paid providers
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-}
+      - AZURE_OPENAI_CHAT_DEPLOYMENT=${AZURE_OPENAI_CHAT_DEPLOYMENT:-}
+      - AZURE_OPENAI_EMBED_DEPLOYMENT=${AZURE_OPENAI_EMBED_DEPLOYMENT:-}
+      # openai_compat slot (plan 003 Step 5b, graph-free/Groq) — unused until then.
+      - OPENAI_COMPAT_BASE_URL=${OPENAI_COMPAT_BASE_URL:-}
+      - OPENAI_COMPAT_API_KEY=${OPENAI_COMPAT_API_KEY:-}
+      - OPENAI_COMPAT_MODEL=${OPENAI_COMPAT_MODEL:-}
       - POSTGRES_USER=${POSTGRES_USER:-admin}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret_pass}
       - POSTGRES_DB=${POSTGRES_DB:-vectordb}

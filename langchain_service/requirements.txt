@@ -2,7 +2,11 @@ flask
 langchain-core
 #swagger-ui-py
 langchain-community
-#langchain-openai
+# Hosted providers (plan 003 Step 4): AzureChatOpenAI / AzureOpenAIEmbeddings /
+# ChatOpenAI(base_url=...). Pinned like the MCP adapters — the exact param and
+# env-var surface (azure_deployment, api_version, dimensions) was verified
+# against this version's wheel before writing the factory branches.
+langchain-openai==1.3.5
 langchain-ollama
 langgraph
 langchain-postgres

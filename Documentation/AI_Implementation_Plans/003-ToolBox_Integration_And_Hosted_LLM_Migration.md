@@ -363,6 +363,59 @@ curl -s -X POST http://localhost:5001/graph/tools -H 'Content-Type: application/
 
 The middle command is the demo moment in miniature: mock model, but a **real MCP tool call across containers**. If both curls behave, Steps 2+3 are verified; Step 4 (Azure provider) then needs your portal prerequisites from the Stage 3 checklist.
 
+### [Timothy — 2026_07_19_20_02] Step 4 granted, with a sequencing change
+
+Rather than doing the Azure portal session now, Timothy asked: implement the Step 4 code first, do the portal work AFTER all steps are complete — and at that point have the AI produce a **concepts document** he can use to walk through the external-account creation with full understanding. Agreed arrangement:
+
+- Code lands now against env-var *names*; `.env` values arrive later.
+- Mock mode (the default) is unaffected throughout; live-without-keys fails loudly by design — so nothing is in a broken state while the portal work waits.
+- Step 8 (live verification) and the acceptance criteria that require real Azure calls are **deferred until the portal session**; everything verifiable offline is verified now.
+- NEW deliverable added to this plan's close-out: `Documentation/concepts_documentation/021-*` covering the Azure onboarding walkthrough (account → budget → resource → deployments → keys) plus the Step 4 concepts (provider abstraction, deployments-vs-models indirection, fail-loud config, cost guards).
+
+### [AI — 2026_07_19_20_02] Step 4 complete (code) — Azure provider + hosted-model migration; live verification deferred
+
+**Changed (4 files):**
+
+1. **`langchain_service/requirements.txt`** — `langchain-openai==1.3.5` (was a commented-out stub from the project's past). Same pin discipline as Step 2: the wheel was downloaded and inspected first — `AzureChatOpenAI` reads `AZURE_OPENAI_ENDPOINT`/`AZURE_OPENAI_API_KEY`/`OPENAI_API_VERSION`, takes `azure_deployment`/`api_version`/`max_tokens`; embeddings accept `dimensions`. Requires `langchain-core>=1.4.9,<2` — compatible.
+2. **`app/models/factory.py`** — the provider matrix (Stage 2 D1, revised 16_48):
+   - `get_chat_model(userDesiredModel, provider=None)`: mock overrides everything; else `provider` arg (per-pipeline binding for Step 5b) → `LLM_PROVIDER` env → **default `azure`**. Branches: `azure` → `AzureChatOpenAI` (deployment-addressed; `userDesiredModel` deliberately ignored — the deployment IS the model choice, documented in-code); `openai_compat` → `ChatOpenAI(base_url=..)` for Groq/any OpenAI-protocol endpoint; `ollama` → original path **kept verbatim**; unknown → `ValueError` naming the valid set.
+   - `get_embedding_model(...)`: `azure` → `AzureOpenAIEmbeddings(dimensions=768)` — **pgvector schema unchanged** (the v1 migration risk closed as designed); `openai_compat` → refuses with an explanatory error (chat-only free tiers; we don't pretend); `ollama` kept.
+   - `_require_env()` — fail-loud with a subtlety found during implementation: compose's `${VAR:-}` interpolation turns unset host vars into **empty strings**, which pass a `KeyError` check while being useless. Empty counts as missing; the error names the variable and points at `.env.example`.
+   - `_max_tokens()` — `LLM_MAX_TOKENS` (default 1024) applied at construction on BOTH paid branches, so no pipeline can forget the cap (the Step 3 deferral, landed).
+3. **`docker-compose.yaml`** — ollama moved to `profiles: ["local-live"]` (D6 as agreed: `--profile local-live` + `LLM_PROVIDER=ollama` on the hardware-return day); langchain_service gains the 10 provider env lines (`LLM_PROVIDER` default azure, `LLM_MAX_TOKENS`, 5× `AZURE_*`, 3× `OPENAI_COMPAT_*`), all `${VAR:-}` pass-throughs from `.env`.
+4. **New `.env.example`** (root) — every name, no values, portal-sourced guidance per entry, and the rotation-not-rewrite rule restated.
+
+**Deviations/notes:**
+- `build.sh` untouched (scripts out of scope): its live-mode echo "Ollama active" is now stale. Logged as debt; one-line fix whenever scripts are next opened.
+- `LLM_PROVIDER` defaults to `azure` (not `ollama`): "live means hosted" is the new posture, and defaulting to ollama would silently fall back to mock when no local model answers — the exact quiet degradation this plan is against.
+
+**Verified by AI (offline — everything not requiring a real key):**
+- Full unit suite still **40/40**.
+- `LLM_MODE=live` + azure + no keys → `RuntimeError: AZURE_OPENAI_ENDPOINT is required...` (fail-loud proven).
+- Azure branches construct offline with fake keys: `AzureChatOpenAI` (max_tokens=1024, deployment threaded), `AzureOpenAIEmbeddings` (dimensions=768). No network at construction.
+- `openai_compat` chat constructs (Groq-shaped config); embeddings refuse with the designed message; unknown provider → `ValueError`; mock override intact.
+- Compose YAML parses; ollama under `local-live`; 10 env lines wired.
+
+**Deferred to the portal session (tracked, not lost):** real Azure chat/embedding calls, OpenWebUI live demo, cost-observation — all parked in Step 8. **Re-ingestion note for that day:** switching embeddings mock→Azure requires re-ingesting RAG content (same 768-dim schema, different semantic space) — e.g. recreate the pgvector volume or force the idempotent ingestion to re-run by content-hash reset.
+
+**Timothy's verification commands (mock mode — proves the migration didn't disturb anything):**
+
+```bash
+docker compose up -d --build langchain_service
+curl -s -X POST http://localhost:5001/graph/tools -H 'Content-Type: application/json' \
+  -d '{"user_message": "TOOLCALL ping {\"message\": \"still-works\"}"}' | python3 -m json.tool
+# expect: "pong: still-works" — Steps 1-3 behavior unchanged under the new factory
+
+docker compose exec langchain_service python -c "
+import os; os.environ['LLM_MODE']='live'; os.environ['LLM_PROVIDER']='azure'
+from app.models.factory import ModelFactory
+try: ModelFactory.get_chat_model('x')
+except RuntimeError as e: print('fail-loud OK:', e)"
+# expect: the AZURE_OPENAI_ENDPOINT-is-required message — live stays honest until .env is filled
+```
+
+If both behave, Step 4 (code) is verified. Next: Step 5 (`graph-premium`) or Step 5b (`graph-free`) — 5b's code can also land now (env-name-only, same arrangement), with its 5-minute Groq signup joining the deferred portal batch.
+
 # Stage 5 (Final Results, Testing, Verification)
 
 *(Populated at completion.)*

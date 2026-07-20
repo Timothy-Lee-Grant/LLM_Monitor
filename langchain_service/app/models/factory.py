@@ -6,9 +6,30 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings, ChatOpenAI
 from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
 from app.prompts.mock_prompts import MOCK_RESPONSES
 from langchain_ollama import OllamaEmbeddings
+
+
+def _require_env(name: str) -> str:
+    """Fail-loud env read (plan 003 D5). os.environ[...] alone is not enough
+    here: compose's `${VAR:-}` interpolation passes UNSET host vars through as
+    EMPTY STRINGS, which are "present" to a KeyError check but useless as
+    config. Treat empty as missing, and say exactly what to fix."""
+    value = os.environ.get(name, "")
+    if not value:
+        raise RuntimeError(
+            f"{name} is required for LLM_PROVIDER={os.getenv('LLM_PROVIDER')!r} "
+            "in live mode but is unset/empty. Set it in .env (see .env.example)."
+        )
+    return value
+
+
+def _max_tokens() -> int:
+    """Hard output cap for PAID providers (plan 003 D4 cost guard). Applied at
+    model construction so no pipeline can forget it. Env-tunable, no rebuild."""
+    return int(os.getenv("LLM_MAX_TOKENS", "1024"))
 
 
 class MockChatModel(BaseChatModel):
@@ -79,29 +100,76 @@ class ModelFactory:
 
     # The user's post request will have a option for the model which they want to talk with.
     @staticmethod
-    def get_chat_model(userDesiredModel: str) -> BaseChatModel:
+    def get_chat_model(userDesiredModel: str, provider: str | None = None) -> BaseChatModel:
+        """Mode/provider resolution (plan 003 Step 4):
 
+        LLM_MODE=mock                      -> MockChatModel, ALWAYS (dev default;
+                                              overrides any provider)
+        LLM_MODE=live, provider resolution -> explicit `provider` arg (the
+                                              per-pipeline binding for routing,
+                                              Stage 2 D1) else LLM_PROVIDER env:
+          azure         -> AzureChatOpenAI against the deployment named in env.
+                           NOTE: Azure addresses DEPLOYMENTS (your named
+                           instance of a model), not model names — so
+                           userDesiredModel is deliberately ignored here; the
+                           deployment IS the model choice.
+          openai_compat -> ChatOpenAI pointed at any OpenAI-protocol endpoint
+                           (Groq/Gemini/OpenRouter/...) — provider swap is a
+                           base_url + key + model-name config change (D1).
+          ollama        -> the original local path, kept verbatim for the
+                           hardware-return day (`local-live` compose profile).
+        """
         if os.getenv("LLM_MODE") == "mock":
             return MockChatModel()
-        
-        base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-        res = TryGetOllamaChatModel(userDesiredModel, base_url)
 
-        if not res:
-            # There was an issue durring the instruction to get ollama service to pull the model
-            return MockChatModel() 
+        provider = provider or os.getenv("LLM_PROVIDER", "azure")
 
-        chatConnection = ChatOllama(
-            model=userDesiredModel,
-            base_url=base_url,
-            temperature=0
+        if provider == "azure":
+            return AzureChatOpenAI(
+                # endpoint + key are read by the client from AZURE_OPENAI_ENDPOINT /
+                # AZURE_OPENAI_API_KEY; _require_env'd here so the failure is OURS,
+                # at startup, with a message — not the SDK's, mid-request.
+                azure_endpoint=_require_env("AZURE_OPENAI_ENDPOINT"),
+                api_key=_require_env("AZURE_OPENAI_API_KEY"),
+                api_version=_require_env("AZURE_OPENAI_API_VERSION"),
+                azure_deployment=_require_env("AZURE_OPENAI_CHAT_DEPLOYMENT"),
+                temperature=0,
+                max_tokens=_max_tokens(),
+            )
+
+        if provider == "openai_compat":
+            return ChatOpenAI(
+                base_url=_require_env("OPENAI_COMPAT_BASE_URL"),
+                api_key=_require_env("OPENAI_COMPAT_API_KEY"),
+                model=os.getenv("OPENAI_COMPAT_MODEL") or userDesiredModel,
+                temperature=0,
+                max_tokens=_max_tokens(),
+            )
+
+        if provider == "ollama":
+            base_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
+            res = TryGetOllamaChatModel(userDesiredModel, base_url)
+
+            if not res:
+                # There was an issue durring the instruction to get ollama service to pull the model
+                return MockChatModel()
+
+            chatConnection = ChatOllama(
+                model=userDesiredModel,
+                base_url=base_url,
+                temperature=0
+            )
+
+            return chatConnection
+
+        raise ValueError(
+            f"Unknown LLM_PROVIDER {provider!r}. Valid: azure, openai_compat, ollama "
+            "(or LLM_MODE=mock, which ignores the provider entirely)."
         )
-
-        return chatConnection
 
 
     @staticmethod
-    def get_embedding_model(userDesiredModel:str):
+    def get_embedding_model(userDesiredModel: str, provider: str | None = None):
         if os.getenv("LLM_MODE") == "mock":
             # Deterministic: identical text ALWAYS produces the identical vector,
             # so retrieval behavior is reproducible and assertable in tests.
@@ -111,6 +179,33 @@ class ModelFactory:
             # sibling FakeEmbeddings is plural — inconsistent naming in langchain_core
             # itself, which is how the original typo slipped in (Timothy caught it).
             return DeterministicFakeEmbedding(size=768)
+
+        provider = provider or os.getenv("LLM_PROVIDER", "azure")
+
+        if provider == "azure":
+            return AzureOpenAIEmbeddings(
+                azure_endpoint=_require_env("AZURE_OPENAI_ENDPOINT"),
+                api_key=_require_env("AZURE_OPENAI_API_KEY"),
+                api_version=_require_env("AZURE_OPENAI_API_VERSION"),
+                azure_deployment=_require_env("AZURE_OPENAI_EMBED_DEPLOYMENT"),
+                # text-embedding-3 models accept a dimensions parameter: request
+                # 768 so live vectors share the pgvector column schema with the
+                # mock's DeterministicFakeEmbedding(768) — no schema migration.
+                # (Re-INGESTION is still required when switching mock->live:
+                # mock and real vectors don't share a semantic space.)
+                dimensions=768,
+            )
+
+        if provider == "openai_compat":
+            # Deliberate: Groq-class chat endpoints don't serve embeddings.
+            # RAG under the free tier isn't a thing we pretend to support.
+            raise RuntimeError(
+                "openai_compat has no embeddings path (chat-only free tiers). "
+                "Use provider='azure' (or 'ollama' with local hardware) for embeddings."
+            )
+
+        if provider != "ollama":
+            raise ValueError(f"Unknown LLM_PROVIDER {provider!r} for embeddings.")
 
         # Fallback normalized to the compose *service* name (matches get_chat_model);
         # in practice OLLAMA_BASE_URL is always set by docker-compose.
