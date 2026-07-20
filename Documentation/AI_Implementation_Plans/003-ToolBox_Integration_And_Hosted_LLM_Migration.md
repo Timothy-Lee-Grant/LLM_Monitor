@@ -460,6 +460,47 @@ docker compose logs langchain_service --tail 5 | grep "sampled judge"
 
 If those behave, Step 5 is verified. Remaining: Step 5b (`graph-free`, code-only now), then Steps 6–7 (cost guards/CONTRACTS + tests), Step 8 + concepts doc at your portal session.
 
+### [Timothy — 2026_07_19_21_05] Step 5b granted ("next step")
+
+### [AI — 2026_07_19_21_05] Step 5b complete — `graph-free`: the routing pipeline
+
+**Changed (4 files), all small — the Step 4/5 groundwork did the heavy lifting:**
+
+1. **`app/graph/nodes.py`** — `make_tool_agent_node` gains `provider=None`: the per-pipeline binding, passed through to `ModelFactory.get_chat_model(..., provider=provider)`. None defers to `LLM_PROVIDER` env (so Azure pipelines needed no change); mock still overrides inside the factory.
+2. **`app/graph/build_graph.py`** — `build_tool_graph(tools, checkpointer=None, provider=None)` threads the binding to the agent at build time. `graph-free` is literally the SAME topology compiled with a different binding — same graph, different model economics, which is the routing-table point.
+3. **`app/orchestration/pipelines.py`** — `_GRAPH_FREE = build_tool_graph(_TOOLBOX_TOOLS, provider="openai_compat")`; registered inside the toolbox conditional with a description stating the tier contract. Plus an honest-metadata fix: `_graph_response`/`_run_tool_graph` accept a `model_label` override so graph-free reports `OPENAI_COMPAT_MODEL` (the model that actually answered), not `LLM_MODEL`.
+4. **`app/api/FlaskServer.py`** — `/graph/free` route.
+
+No compose/.env changes needed — the `OPENAI_COMPAT_*` slots were pre-wired in Step 4.
+
+**Note on fail-loud timing (on the record):** per-pipeline keys are checked at REQUEST time, not startup — nodes construct models per request, and a startup check for every provider would break the mock-first default. A live `/graph/free` call without Groq keys returns `_require_env`'s message naming `OPENAI_COMPAT_BASE_URL`. Consistent with the Azure pipelines; documented in-code.
+
+**Verified by AI (sandbox):**
+- Provider-binding proof: instrumented the factory and ran both graphs — free graph passes `openai_compat` on **every** loop iteration (both the tool-call emission and the post-tool answer), lean graph passes `None` (env-deferred). Tool loop produces `pong: free-e2e`.
+- Full unit suite **40/40**; unregistered `/graph/free` → contract-shaped `404 unknown_pipeline`.
+
+**Timothy's verification (mock mode — 30 seconds):**
+
+```bash
+docker compose up -d --build langchain_service
+curl -s http://localhost:5001/v1/models | python3 -m json.tool | grep "llm-monitor.graph"
+# expect FOUR graph pipelines now: graph-basic, graph-rag, graph-tools, graph-premium, graph-free (5 with basic)
+
+curl -s -X POST http://localhost:5001/graph/free -H 'Content-Type: application/json' \
+  -d '{"user_message": "TOOLCALL ping {\"message\": \"routed\"}"}' | python3 -m json.tool
+# expect: "pong: routed", model_used: "mock-stub-provider" (mock mode) — the routing tier runs at $0
+```
+
+**The routing table, as it now stands** (this is the interview slide):
+
+| Pipeline | Provider binding | Flow | Cost posture |
+|---|---|---|---|
+| `graph-tools` | env default (Azure) | agent ⇄ tools | lean: caps, no aux LLM calls |
+| `graph-premium` | env default (Azure) | policy → RAG → agent ⇄ tools → sampled judge | full: 1 gate call + sampled async judge |
+| `graph-free` | `openai_compat` (Groq) | agent ⇄ tools | $0: free tier, same caps |
+
+Remaining: Step 6 (CONTRACTS tier rule + Grafana cost panel), Step 7 (formal test suite for all of the above), Step 8 + concepts document at the portal session. Your deferred portal batch is unchanged: Azure (the big session) + Groq (5 minutes).
+
 # Stage 5 (Final Results, Testing, Verification)
 
 *(Populated at completion.)*

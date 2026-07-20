@@ -60,7 +60,7 @@ def respond_node(state: ChatState) -> dict:
 
 # ---- tool-loop nodes (plan 003 Step 3) ------------------------------------
 
-def make_tool_agent_node(tools, include_context: bool = False):
+def make_tool_agent_node(tools, include_context: bool = False, provider: str | None = None):
     """Factory: a tool-aware agent node closed over the discovered toolset.
 
     A factory (vs a module-level function like agent_node) because the node
@@ -77,6 +77,12 @@ def make_tool_agent_node(tools, include_context: bool = False):
     message (the message-list equivalent of the assistant template's
     {context} slot). Decided at BUILD time like everything else here — the
     lean graph's compiled agent contains no context branch at all.
+
+    provider (plan 003 Step 5b): the PER-PIPELINE provider binding from
+    Stage 2 D1/16_48 — this is what turns the registry into a routing table.
+    None (the default) defers to LLM_PROVIDER env, so the Azure pipelines
+    need no explicit binding; graph-free passes "openai_compat" here at
+    build time. Mock mode still overrides everything inside the factory.
     """
 
     async def tool_agent_node(state: ChatState) -> dict:
@@ -84,7 +90,7 @@ def make_tool_agent_node(tools, include_context: bool = False):
         # -> pipelines chain (same reasoning as agent_node above).
         from app.orchestration.pipelines import extract_usage
 
-        model = ModelFactory.get_chat_model(state["desired_model"]).bind_tools(tools)
+        model = ModelFactory.get_chat_model(state["desired_model"], provider=provider).bind_tools(tools)
 
         system = PromptFactory.get_tool_agent_system()
         if include_context:

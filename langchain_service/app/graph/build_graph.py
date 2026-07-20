@@ -52,7 +52,7 @@ def build_graph(with_rag: bool, checkpointer=None):
     return g.compile(checkpointer=checkpointer)
 
 
-def build_tool_graph(tools, checkpointer=None):
+def build_tool_graph(tools, checkpointer=None, provider=None):
     """Tool-loop variant (plan 003 Step 3) — the "new flow entirely" rung of
     the growth path documented above, plus this graph's one NEW concept: a
     CONDITIONAL edge, decided per-run by the model's own output.
@@ -69,10 +69,15 @@ def build_tool_graph(tools, checkpointer=None):
     Separate builder (not another build_graph flag): the agent node differs
     (tool-bound, message-accumulating, async) and the wiring differs; a
     with_tools flag would make build_graph two graphs wearing one function.
+
+    provider (plan 003 Step 5b): per-pipeline model binding, threaded to the
+    agent node at build time. None = LLM_PROVIDER env (Azure by default);
+    graph-free compiles this same topology bound to "openai_compat" — same
+    graph, different model economics, which is the routing-table point.
     """
     g = StateGraph(ChatState)
 
-    g.add_node("agent", make_tool_agent_node(tools))
+    g.add_node("agent", make_tool_agent_node(tools, provider=provider))
     g.add_node("tools", ToolNode(tools))
     g.add_node("respond", tool_respond_node)
 

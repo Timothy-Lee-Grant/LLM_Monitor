@@ -38,6 +38,7 @@ PIPELINE_ROUTES = {
     # configured in this deployment".
     "/graph/tools": "graph-tools",
     "/graph/premium": "graph-premium",   # plan 003 Step 5; same conditional-404 behavior
+    "/graph/free": "graph-free",         # plan 003 Step 5b; same conditional-404 behavior
 }
 
 

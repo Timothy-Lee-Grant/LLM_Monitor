@@ -128,15 +128,20 @@ def _initial_state(request: ChatRequest) -> dict:
     }
 
 
-def _graph_response(request: ChatRequest, pipeline_id: str, final_state: dict, started: float) -> ChatResponse:
-    """Final-state -> ChatResponse assembly — shared by sync and tool graphs."""
+def _graph_response(request: ChatRequest, pipeline_id: str, final_state: dict, started: float,
+                    model_label: str | None = None) -> ChatResponse:
+    """Final-state -> ChatResponse assembly — shared by sync and tool graphs.
+
+    model_label override (plan 003 Step 5b): pipelines bound to a non-default
+    provider (graph-free) report THEIR model, not LLM_MODEL's — the metadata
+    must tell the truth about which model actually answered."""
     sources = [doc.metadata.get("source", "unknown") for doc in final_state.get("retrieved_chunks", [])]
 
     return ChatResponse(
         response=final_state["answer"],
         metadata=ChatMetadata(
             pipeline_id=pipeline_id,
-            model_used=_resolved_model_label(request),
+            model_used=model_label or _resolved_model_label(request),
             retrieved_sources=sources,
             latency_ms=int((time.perf_counter() - started) * 1000),
             prompt_tokens=final_state.get("prompt_tokens", 0),
@@ -163,7 +168,7 @@ def _run_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
 TOOL_RECURSION_LIMIT = int(os.getenv("TOOL_RECURSION_LIMIT", "8"))
 
 
-def _run_tool_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatResponse:
+def _run_tool_graph(request: ChatRequest, pipeline_id: str, graph, model_label: str | None = None) -> ChatResponse:
     """Tool-loop twin of _run_graph — async because the MCP adapter tools are
     async-only (Step 2 finding): sync graph.invoke() would raise on the first
     tool execution. asyncio.run() is safe here: gunicorn's sync workers have
@@ -178,7 +183,7 @@ def _run_tool_graph(request: ChatRequest, pipeline_id: str, graph) -> ChatRespon
 
     final_state = asyncio.run(graph.ainvoke(_initial_state(request), config=config))
 
-    return _graph_response(request, pipeline_id, final_state, started)
+    return _graph_response(request, pipeline_id, final_state, started, model_label=model_label)
 
 
 # ---- premium tier: runner + sampled async judge (plan 003 Step 5) ----------
@@ -367,4 +372,35 @@ if os.getenv("TOOLBOX_URL"):
             "+ zero judge calls on the user's clock."
         ),
         handler=graph_premium,
+    ))
+
+    # graph-free (plan 003 Step 5b): SAME topology as graph-tools, compiled
+    # with the per-pipeline binding provider="openai_compat" — the registry
+    # as a routing table, made concrete. $0 real-model dev loop (Groq free
+    # tier) + the multi-provider routing demo. Registered whenever the
+    # toolbox exists; in live mode without OPENAI_COMPAT_* keys a request
+    # fails with _require_env's message naming the missing variable (same
+    # honest posture as the Azure pipelines — note: at REQUEST time, since
+    # that's when nodes construct models; startup can't check per-pipeline
+    # keys without breaking the mock-first default).
+    _GRAPH_FREE = build_tool_graph(_TOOLBOX_TOOLS, provider="openai_compat")
+
+    def _free_model_label(request: ChatRequest) -> str:
+        if os.getenv("LLM_MODE") == "mock":
+            return "mock-stub-provider"
+        return os.getenv("OPENAI_COMPAT_MODEL") or "openai-compat"
+
+    def graph_free(request: ChatRequest) -> ChatResponse:
+        return _run_tool_graph(request, pipeline_id="graph-free", graph=_GRAPH_FREE,
+                               model_label=_free_model_label(request))
+
+    register(Pipeline(
+        id="graph-free",
+        description=(
+            "LangGraph MCP tool loop (FREE tier): identical topology to graph-tools, "
+            "bound to an OpenAI-compatible free endpoint (Groq) instead of Azure — "
+            "multi-provider routing via per-pipeline model binding. Same caps as lean; "
+            "no embeddings/RAG on this path (chat-only free tiers)."
+        ),
+        handler=graph_free,
     ))
