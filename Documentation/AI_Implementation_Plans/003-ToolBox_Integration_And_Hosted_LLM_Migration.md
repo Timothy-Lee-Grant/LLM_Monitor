@@ -547,7 +547,11 @@ docker compose exec langchain_service python -m pytest tests/test_toolbox_integr
 bash scripts/acceptance_check.sh mock    # includes the 7 new plan-003 PASS lines
 ```
 
-**That closes everything codeable without keys.** Remaining in 003, all gated on your portal batch: Step 8 (live verification: Azure chat through OpenWebUI, `current_time` demo, judge score in Langfuse, Grafana cost row alive, spend reconciliation) and the close-out concepts document (`concepts_documentation/021`: Azure onboarding walkthrough + plan-003 concepts). When you're ready to do the Azure + Groq signups, say so and I'll produce the concepts document FIRST so you can walk through the portal with it open.
+**That closes everything codeable without keys.**
+
+### [AI — 2026_07_19_18_49, post-Step-7] Close-out concepts document delivered
+
+Per the 20_02 arrangement, the concepts document was produced BEFORE the portal session so Timothy can walk through account creation with it open: `Documentation/concepts_documentation/021-Plan_003_Tools_Providers_Cost_Engineering_And_Azure_Onboarding_Lecture.md`. Part I lectures the plan-003 concepts (MCP/tool anatomy, async bridges, provider abstraction, cost engineering, honest agent testing); Part II is the ordered walkthrough of Timothy's remaining work (Azure phases A1–A6 with budget-first ordering, Groq, live boot + re-ingestion, and the Step 8 checklist whose evidence lands back here in Stage 4). Remaining in 003, all gated on your portal batch: Step 8 (live verification: Azure chat through OpenWebUI, `current_time` demo, judge score in Langfuse, Grafana cost row alive, spend reconciliation) and the close-out concepts document (`concepts_documentation/021`: Azure onboarding walkthrough + plan-003 concepts). When you're ready to do the Azure + Groq signups, say so and I'll produce the concepts document FIRST so you can walk through the portal with it open.
 
 # Stage 5 (Final Results, Testing, Verification)
 
