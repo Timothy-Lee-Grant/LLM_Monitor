@@ -18,11 +18,44 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: ollama_service
-    profiles: ["live"]
+    # Plan 003 Step 4: "live" now means HOSTED models (Azure by default) — it
+    # no longer starts ollama. This profile is the preserved local-inference
+    # path for when capable hardware returns:
+    #   docker compose --profile local-live up -d   (+ LLM_PROVIDER=ollama)
+    # NOTE build.sh's live-mode echo still says "Ollama active" — stale, known,
+    # left alone (scripts untouched in this step; logged as debt in plan 003).
+    profiles: ["local-live"]
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+
+  # ---- MCP tool server (plan 003 Step 1) --------------------------------
+  # Sibling checkout of https://github.com/Timothy-Lee-Grant/Tool_Box
+  # (branch feature/002-streamable-http). Compose rebuilds on change; when
+  # this hurts (CI, other machines) the next rung is a tagged local image,
+  # then a registry — don't climb before the current rung wobbles.
+  # NOT profile-gated on purpose (plan 003 Stage 1): tools are real and free
+  # in both mock and live modes — only MODELS are mocked/paid.
+  toolbox:
+    build:
+      context: ../Tool_Box
+    container_name: toolbox
+    environment:
+      # Host-header allowlist (DNS-rebinding defense). "toolbox" is the name
+      # this service is addressed by on the compose network — it MUST be
+      # listed or every request is rejected with 400.
+      - AllowedHosts=localhost;127.0.0.1;toolbox
+    # curl exists in the image (its dockerfile installs it explicitly).
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    # Deliberately NO `ports:` section — reachable ONLY on the internal
+    # compose network. Same lockdown posture as deleting langchain's 5001
+    # mapping: exposure must be a conscious config change.
 
   langchain_service:
     build: 
@@ -35,6 +68,9 @@ services:
       - "5001:5000"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      # MCP tool discovery endpoint (plan 003; consumed from Step 2 on).
+      # The path is /mcp — not / — a classic empty-tool-list trap.
+      - TOOLBOX_URL=http://toolbox:8080/mcp
       - OBSERVABILITY_ENABLED=${OBSERVABILITY_ENABLED:-false}   # consumed from Step 3 on
       # Langfuse SDK config (plan 002 Step 5) — matches the LANGFUSE_INIT_* keys
       # above; only consulted when OBSERVABILITY_ENABLED=true.
@@ -43,11 +79,33 @@ services:
       - LANGFUSE_SECRET_KEY=sk-lf-local-llm-monitor
       - LLM_MODE=${LLM_MODE:-mock}
       - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      # ---- hosted-provider config (plan 003 Step 4) ----------------------
+      # Values live in .env (gitignored; names documented in .env.example).
+      # ${VAR:-} passes unset vars through as EMPTY strings — the factory's
+      # _require_env treats empty as missing and fails LOUDLY at startup, so
+      # live mode without keys dies with a message, never silently degrades.
+      - LLM_PROVIDER=${LLM_PROVIDER:-azure}   # azure | openai_compat | ollama
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-1024}   # output cap: cost guard on paid providers
+      - JUDGE_SAMPLE_RATE=${JUDGE_SAMPLE_RATE:-0.1}   # premium tier: fraction of responses judge-scored (async)
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_API_VERSION=${AZURE_OPENAI_API_VERSION:-}
+      - AZURE_OPENAI_CHAT_DEPLOYMENT=${AZURE_OPENAI_CHAT_DEPLOYMENT:-}
+      - AZURE_OPENAI_EMBED_DEPLOYMENT=${AZURE_OPENAI_EMBED_DEPLOYMENT:-}
+      # openai_compat slot (plan 003 Step 5b, graph-free/Groq) — unused until then.
+      - OPENAI_COMPAT_BASE_URL=${OPENAI_COMPAT_BASE_URL:-}
+      - OPENAI_COMPAT_API_KEY=${OPENAI_COMPAT_API_KEY:-}
+      - OPENAI_COMPAT_MODEL=${OPENAI_COMPAT_MODEL:-}
       - POSTGRES_USER=${POSTGRES_USER:-admin}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-secret_pass}
       - POSTGRES_DB=${POSTGRES_DB:-vectordb}
     depends_on:
       pgvector-service:
+        condition: service_healthy
+      # Toolbox joins the "must be healthy before this service exists" set
+      # (plan 003 Stage 2 A3): tool discovery happens at startup, so booting
+      # without a reachable toolbox would fail anyway — fail early instead.
+      toolbox:
         condition: service_healthy
     # python:3.11-slim ships neither curl nor wget, so the probe is stdlib python.
     # start_period covers image boot + one-time RAG ingestion in the entrypoint.

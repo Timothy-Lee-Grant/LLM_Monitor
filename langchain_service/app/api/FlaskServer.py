@@ -31,6 +31,14 @@ PIPELINE_ROUTES = {
     "/chat/rag": "chat-rag",
     "/graph/basic": "graph-basic",
     "/graph/rag": "graph-rag",
+    # plan 003 Step 3. Registration is conditional on TOOLBOX_URL (see
+    # pipelines.py) but this map is static — when the pipeline isn't
+    # registered, this route 404s with the contract's unknown_pipeline
+    # error, which is exactly the right answer for "capability not
+    # configured in this deployment".
+    "/graph/tools": "graph-tools",
+    "/graph/premium": "graph-premium",   # plan 003 Step 5; same conditional-404 behavior
+    "/graph/free": "graph-free",         # plan 003 Step 5b; same conditional-404 behavior
 }
 
 
