@@ -38,8 +38,7 @@ services:
   # NOT profile-gated on purpose (plan 003 Stage 1): tools are real and free
   # in both mock and live modes — only MODELS are mocked/paid.
   toolbox:
-    build:
-      context: ../Tool_Box
+    image: ghcr.io/timothy-lee-grant/tool_box:1.0.0
     container_name: toolbox
     environment:
       # Host-header allowlist (DNS-rebinding defense). "toolbox" is the name
