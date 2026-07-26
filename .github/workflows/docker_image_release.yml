@@ -1,0 +1,84 @@
+name: Build and Publish LLM_Monitor Images
+
+# Modeled directly on Tool_Box's docker_image_release.yml (same repo family,
+# same registry, same tag convention) — see Documentation/concepts_documentation/
+# 022-Release_And_Publishing_Concepts_Lecture.md for the full reasoning. Two
+# publishable services (gateway, langchain_service); toolbox is a separate
+# repo with its own workflow, not built here.
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*.*.*"]
+
+jobs:
+  publish-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write   # Required to push to ghcr.io
+
+    # Each matrix leg is a fully independent job/runner (its own checkout,
+    # its own login, its own push) — the alternative (one job building both
+    # sequentially) would be a single point of failure for two unrelated
+    # images and wouldn't build them in parallel.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - component: gateway
+            context: ./server
+            dockerfile: ./server/dockerfile
+          - component: langchain-service
+            context: ./langchain_service
+            dockerfile: ./langchain_service/dockerfile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Needed to cross-build for arm64 on this (amd64) runner — learned the
+      # hard way on Tool_Box's first publish: without this, build-push-action
+      # silently only builds for the runner's own platform.
+      - name: Set up QEMU (cross-arch emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR (and every OCI registry) rejects uppercase in image references —
+      # github.repository preserves this repo's actual case
+      # ("Timothy-Lee-Grant/LLM_Monitor"), so it must be lowercased before use.
+      # One image per matrix component: llm_monitor-gateway, llm_monitor-langchain-service.
+      - name: Compute lowercase image name
+        run: echo "IMAGE_NAME=$(echo 'ghcr.io/${{ github.repository }}-${{ matrix.component }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          # linux/amd64 (GitHub-hosted runners, most cloud hosts) + linux/arm64
+          # (Apple Silicon dev machines, AWS Graviton, etc.) — build-push-action
+          # publishes ONE manifest list covering both; `docker pull`/`compose up`
+          # on either architecture resolves the same tag to the right image.
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
