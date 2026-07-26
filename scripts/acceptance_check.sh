@@ -69,8 +69,10 @@ for p in chat-basic chat-rag graph-basic graph-rag; do
   assert_json "$body" "d['status']=='success' and d['metadata']['pipeline_id']=='$p'"
   result $? "gateway /api/llm/$route returns contract success"
 done
-assert_json "$(curl -s $GATEWAY/v1/models)" "{m['id'] for m in d['data']} == {'llm-monitor.chat-basic','llm-monitor.chat-rag','llm-monitor.graph-basic','llm-monitor.graph-rag'}"
-result $? "gateway /v1/models lists exactly the 4 registry pipelines"
+# Plan 003: the registry grew three toolbox-conditional pipelines; compose
+# always sets TOOLBOX_URL, so a compose deployment lists all seven.
+assert_json "$(curl -s $GATEWAY/v1/models)" "{m['id'] for m in d['data']} == {'llm-monitor.chat-basic','llm-monitor.chat-rag','llm-monitor.graph-basic','llm-monitor.graph-rag','llm-monitor.graph-tools','llm-monitor.graph-premium','llm-monitor.graph-free'}"
+result $? "gateway /v1/models lists exactly the 7 registry pipelines"
 
 echo "--- Contract error paths (CONTRACTS.md §3) ---"
 code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$SERVICE/chat/basic" -H "Content-Type: application/json" -d '{}')
@@ -92,6 +94,29 @@ if [ "$MODE" = "live" ]; then
   echo "    RAG:   $(echo "$rag_body"   | python3 -c "import sys,json; print(json.load(sys.stdin)['response'][:300])")"
   echo "    BASIC: $(echo "$basic_body" | python3 -c "import sys,json; print(json.load(sys.stdin)['response'][:300])")"
 fi
+
+echo "--- Plan 003: ToolBox + tiered pipelines (mock-mode assertions) ---"
+# Toolbox is internal-only; probe it from INSIDE the network. The langchain
+# image has no curl (python:slim), so the probe is stdlib python — same idiom
+# as its own healthcheck.
+docker exec langchain_service python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://toolbox:8080/health').status==200 else 1)" 2>/dev/null
+result $? "toolbox /health answers 200 from inside the compose network"
+curl -sf http://localhost:8080/health >/dev/null 2>&1
+[ $? -ne 0 ]; result $? "toolbox is NOT reachable from the host (lockdown posture holds)"
+
+TOOLQ='{"user_message":"TOOLCALL ping {\"message\": \"acceptance\"}"}'
+body=$(post "$SERVICE/graph/tools" "$TOOLQ")
+assert_json "$body" "d['status']=='success' and 'pong: acceptance' in d['response'] and d['metadata']['retrieved_sources']==[]"
+result $? "graph/tools executes a real MCP tool; lean tier does not retrieve"
+body=$(post "$SERVICE/graph/premium" "$TOOLQ")
+assert_json "$body" "d['status']=='success' and 'pong: acceptance' in d['response'] and d['metadata']['retrieved_sources']"
+result $? "graph/premium executes the tool AND retrieves (tier difference visible)"
+body=$(post "$SERVICE/graph/premium" '{"user_message":"BLOCKME forbidden request"}')
+assert_json "$body" "d['status']=='success' and \"can't help\" in d['response'] and d['metadata']['retrieved_sources']==[]"
+result $? "graph/premium policy gate blocks; retrieval never runs on blocked requests"
+body=$(post "$SERVICE/graph/free" "$TOOLQ")
+assert_json "$body" "d['status']=='success' and 'pong: acceptance' in d['response']"
+result $? "graph/free (routing tier) executes the tool"
 
 echo "--- Criterion 4: ingestion idempotency (restart -> row count unchanged) ---"
 c1=$(count_rows)

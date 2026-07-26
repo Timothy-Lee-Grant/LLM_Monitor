@@ -77,13 +77,22 @@ The services, each in its own container:
 
 ```
 ./build.sh --mode mock        # lightweight, stubbed model provider
-./build.sh --mode live        # real Ollama models (add --gpu for the GPU compose override)
+./build.sh --mode live        # real hosted model (see "Going live" below for provider setup)
 ./build.sh --mode mock --obs  # either mode + the observability stack (Jaeger, Prometheus, Grafana, Langfuse)
 bash scripts/acceptance_check.sh mock   # PASS/FAIL check against the running system
 bash scripts/observability_check.sh     # PASS/FAIL check of the observability stack (requires --obs)
 ```
 
 The mock mode exists because my development machine can't run heavy models. The entire pipeline (gateway, registry, RAG retrieval, contracts) executes identically in both modes; only the model provider is stubbed.
+
+## Going live
+
+Live mode needs a model provider. Copy `.env.example` to `.env` and pick one:
+
+- **Groq (recommended — free, no card required):** the fastest path to a real model. Set `LLM_PROVIDER=openai_compat` plus the `OPENAI_COMPAT_*` keys (a Groq API key from [console.groq.com](https://console.groq.com)) in `.env`. Embeddings for RAG pipelines run on a local CPU model (`fastembed`) under this provider — no separate embeddings account needed.
+- **Azure OpenAI:** set `LLM_PROVIDER=azure` plus the `AZURE_OPENAI_*` keys. Not the default for this project's own live testing right now (see [CLAUDE.md](CLAUDE.md)/the release-plan docs for why), but fully implemented and supported.
+
+Either way: `LLM_PROVIDER` must actually be set in `.env` — there's no implicit default beyond `azure`, so a `.env` with only, say, `OPENAI_COMPAT_*` keys but no `LLM_PROVIDER` line will still try (and fail loudly) to reach Azure.
 
 Startup is health-check ordered (pgvector → langchain_service → gateway → OpenWebUI), so the gateway may be unreachable for the first ~30s. Check readiness with `docker compose -p llm_monitor ps` — `langchain_service` should show `(healthy)`.
 
@@ -102,7 +111,8 @@ All request/response shapes are defined in [CONTRACTS.md](CONTRACTS.md) — the 
 | Prometheus (metrics) | http://localhost:9090 | `--obs` only |
 | Grafana (dashboards) | http://localhost:3001 | `--obs` only; anonymous admin |
 | Langfuse (LLM traces) | http://localhost:3002 | `--obs` only; `timothy@localhost.dev` / `local-dev-password-1` |
-| Ollama | http://localhost:11434 | `live` mode only |
+| Ollama | http://localhost:11434 | `local-live` profile only |
+| Voxel world viewer | open `../Tool_Box/viewer/index.html` in a browser | See "Agentic tools & the voxel viewer" below; needs a toolbox image newer than `1.0.1` (or a local build) |
 
 ## Sending a message
 
@@ -114,7 +124,7 @@ curl -s -X POST localhost:5000/api/llm/graph/rag \
   -d '{"user_message":"Am I allowed to use scripting tools for automation?"}'
 ```
 
-Pipelines: `chat/basic`, `chat/rag`, `graph/basic`, `graph/rag` (same request shape for all; see CONTRACTS.md §1–§4).
+Pipelines: `chat/basic`, `chat/rag`, `graph/basic`, `graph/rag` (same request shape for all; see CONTRACTS.md §1–§4) — plus the tool-calling pipelines (`graph/tools`, `graph/premium`, `graph/free`) covered next.
 
 Direct to langchain_service, skipping the gateway (dev/test only):
 
@@ -134,6 +144,23 @@ curl -s -X POST localhost:5000/v1/chat/completions \
 ```
 
 Health check: `curl localhost:5001/healthz` → `{"status": "ok", "mode": "mock"|"live"}`.
+
+## Agentic tools & the voxel viewer
+
+Three pipelines can call real tools via [MCP](https://modelcontextprotocol.io), served by a separate project ([Tool_Box](https://github.com/Timothy-Lee-Grant/Tool_Box)) running as the `toolbox` container: `graph-tools` (lean tier), `graph-premium` (policy gate + RAG + tools), and `graph-free` (same as `graph-tools`, routed to Groq's free tier regardless of `LLM_PROVIDER`). Full tool catalog: [Tool_Box's `docs/TOOL_CATALOG.md`](https://github.com/Timothy-Lee-Grant/Tool_Box/blob/main/docs/TOOL_CATALOG.md) — currently connectivity/identity tools (Basics) and a live-buildable voxel world (Voxel: `place_block`, `place_box`, `place_sphere`, `mirror`, `describe_world`, ...).
+
+Ask in plain language — the model picks the tool calls:
+
+```bash
+curl -s -X POST localhost:5001/graph/free -H "Content-Type: application/json" \
+  -d '{"user_message":"Build a small 3x3x3 cube of gold blocks at the origin."}'
+```
+
+**Watching it happen live:** the Voxel toolset broadcasts every change over a WebSocket (port 8090 on the `toolbox` container) to a static viewer page — a 3D scene, no build step. With the `toolbox` service's `ports: - "8090:8090"` mapping in place (already in `docker-compose.yaml`), open `../Tool_Box/viewer/index.html` directly in a browser (as a local file, or serve it with `python3 -m http.server` from that folder — some browsers block `file://` pages from opening WebSockets). It connects to `ws://127.0.0.1:8090/voxel/`, shows a `● LIVE` status once connected, and renders every block as the agent places it.
+
+Two things worth knowing if this doesn't work out of the box:
+- **Image version matters.** The published `ghcr.io/timothy-lee-grant/tool_box:1.0.1` tag predates the fix that lets the viewer's WebSocket work through Docker's port publishing (it originally bound to `127.0.0.1` *inside* the container, which no `ports:` mapping can expose). Until a newer tag ships, point the `toolbox` service at a local build instead: `build: context: ../Tool_Box` in place of the `image:` line.
+- **Port 8090 must actually be free on your machine.** The Voxel viewer service starts under *any* transport, including a local `dotnet run`/stdio session (e.g. for Claude Desktop/Code). A leftover local Tool_Box process holding `127.0.0.1:8090` will silently intercept the browser's connection before Docker's port mapping ever sees it — the tools will still work (that part isn't affected), but the viewer will connect and show an empty, frozen world. Check with `lsof -nP -iTCP:8090` if the viewer connects but never updates.
 
 ## Viewing telemetry (requires --obs)
 

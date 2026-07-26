@@ -1,3 +1,4 @@
+from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 
@@ -8,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 ASSISTANT_PROMPT_VERSION = "assistant.friendly@1"
 POLICY_CHECKER_PROMPT_VERSION = "policy.checker@1"
 LLM_JUDGE_PROMPT_VERSION = "judge.faithfulness@2"  # @1 was the pre-rubric stub
+TOOL_AGENT_PROMPT_VERSION = "agent.tools@1"  # plan 003 Step 3
 
 
 class PromptFactory:
@@ -30,6 +32,24 @@ class PromptFactory:
             ("user", "{user_message}")
         ])
     
+    @staticmethod
+    def get_tool_agent_system() -> SystemMessage:
+        """System message for the tool-loop agent (plan 003 Step 3).
+
+        A concrete SystemMessage rather than a ChatPromptTemplate: the tool
+        loop invokes the model on the RAW accumulating message list (human ->
+        ai(tool_calls) -> tool -> ai...), and a template with fixed slots
+        can't represent that growing history. The template returns when a
+        history placeholder is added alongside memory.
+        """
+        return SystemMessage(content=(
+            "You are a happy, cheerful, and encouraging assistant with access to tools.\n"
+            "Use a tool whenever it can answer the user's question factually — for\n"
+            "example current server time or server information — instead of guessing.\n"
+            "After a tool returns, incorporate its result into your answer.\n"
+            "If no tool is relevant, just answer directly."
+        ))
+
     @staticmethod
     def get_policy_checker_prompt() -> ChatPromptTemplate:
         """

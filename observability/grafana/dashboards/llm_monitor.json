@@ -1,51 +1,252 @@
 {
-  "__comment": "LLM Monitor dashboard (plan 002 Step 4). Row 1: RED (rate/errors/duration). Row 2: AI metrics (tokens). Row 3: gateway + scrape health. Provisioned read-only from this file — edit HERE, not in the UI (the plan-001 persisted-config lesson).",
-  "title": "LLM Monitor",
-  "uid": "llm-monitor-main",
-  "schemaVersion": 39,
-  "refresh": "10s",
-  "time": { "from": "now-15m", "to": "now" },
-  "panels": [
-    { "type": "row", "title": "RED — every request-serving system's vital signs", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 } },
+ "__comment": "LLM Monitor dashboard (plan 002 Step 4). Row 1: RED (rate/errors/duration). Row 2: AI metrics (tokens). Row 3: gateway + scrape health. Provisioned read-only from this file \u2014 edit HERE, not in the UI (the plan-001 persisted-config lesson).",
+ "title": "LLM Monitor",
+ "uid": "llm-monitor-main",
+ "schemaVersion": 39,
+ "refresh": "10s",
+ "time": {
+  "from": "now-15m",
+  "to": "now"
+ },
+ "panels": [
+  {
+   "type": "row",
+   "title": "RED \u2014 every request-serving system's vital signs",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "id": 1,
+   "type": "timeseries",
+   "title": "Request rate by pipeline (req/s)",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 0,
+    "y": 1
+   },
+   "targets": [
     {
-      "id": 1, "type": "timeseries", "title": "Request rate by pipeline (req/s)",
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
-      "targets": [ { "expr": "sum by (pipeline_id) (rate(llm_requests_total[1m]))", "legendFormat": "{{pipeline_id}}" } ]
-    },
-    {
-      "id": 2, "type": "timeseries", "title": "Error rate by pipeline (errors/s)",
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 1 },
-      "targets": [ { "expr": "sum by (pipeline_id) (rate(llm_requests_total{status=\"error\"}[1m]))", "legendFormat": "{{pipeline_id}}" } ]
-    },
-    {
-      "id": 3, "type": "timeseries", "title": "Duration p50 / p95 by pipeline (s)",
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 1 },
-      "targets": [
-        { "expr": "histogram_quantile(0.50, sum by (le, pipeline_id) (rate(llm_request_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{pipeline_id}}" },
-        { "expr": "histogram_quantile(0.95, sum by (le, pipeline_id) (rate(llm_request_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{pipeline_id}}" }
-      ]
-    },
-    { "type": "row", "title": "AI metrics — the second observability layer", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 } },
-    {
-      "id": 4, "type": "timeseries", "title": "Token throughput (tokens/s, by pipeline & direction) — zeros in mock mode",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 9 },
-      "targets": [ { "expr": "sum by (pipeline_id, direction) (rate(llm_tokens_total[1m]))", "legendFormat": "{{pipeline_id}} {{direction}}" } ]
-    },
-    {
-      "id": 5, "type": "timeseries", "title": "Avg tokens per request (5m window)",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 9 },
-      "targets": [ { "expr": "sum by (pipeline_id) (rate(llm_tokens_total[5m])) / sum by (pipeline_id) (rate(llm_requests_total{status=\"success\"}[5m]))", "legendFormat": "{{pipeline_id}}" } ]
-    },
-    { "type": "row", "title": "Gateway & scrape health", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 } },
-    {
-      "id": 6, "type": "timeseries", "title": "Gateway request rate (req/s)",
-      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 17 },
-      "targets": [ { "expr": "sum (rate({\"http.server.request.duration_seconds_count\", job=\"gateway\"}[1m]))", "legendFormat": "gateway" } ]
-    },
-    {
-      "id": 7, "type": "stat", "title": "Scrape targets up",
-      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 17 },
-      "targets": [ { "expr": "up", "legendFormat": "{{job}}" } ]
+     "expr": "sum by (pipeline_id) (rate(llm_requests_total[1m]))",
+     "legendFormat": "{{pipeline_id}}"
     }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "timeseries",
+   "title": "Error rate by pipeline (errors/s)",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 8,
+    "y": 1
+   },
+   "targets": [
+    {
+     "expr": "sum by (pipeline_id) (rate(llm_requests_total{status=\"error\"}[1m]))",
+     "legendFormat": "{{pipeline_id}}"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "timeseries",
+   "title": "Duration p50 / p95 by pipeline (s)",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 16,
+    "y": 1
+   },
+   "targets": [
+    {
+     "expr": "histogram_quantile(0.50, sum by (le, pipeline_id) (rate(llm_request_duration_seconds_bucket[5m])))",
+     "legendFormat": "p50 {{pipeline_id}}"
+    },
+    {
+     "expr": "histogram_quantile(0.95, sum by (le, pipeline_id) (rate(llm_request_duration_seconds_bucket[5m])))",
+     "legendFormat": "p95 {{pipeline_id}}"
+    }
+   ]
+  },
+  {
+   "type": "row",
+   "title": "AI metrics \u2014 the second observability layer",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 8
+   }
+  },
+  {
+   "id": 4,
+   "type": "timeseries",
+   "title": "Token throughput (tokens/s, by pipeline & direction) \u2014 zeros in mock mode",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 0,
+    "y": 9
+   },
+   "targets": [
+    {
+     "expr": "sum by (pipeline_id, direction) (rate(llm_tokens_total[1m]))",
+     "legendFormat": "{{pipeline_id}} {{direction}}"
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "type": "timeseries",
+   "title": "Avg tokens per request (5m window)",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 12,
+    "y": 9
+   },
+   "targets": [
+    {
+     "expr": "sum by (pipeline_id) (rate(llm_tokens_total[5m])) / sum by (pipeline_id) (rate(llm_requests_total{status=\"success\"}[5m]))",
+     "legendFormat": "{{pipeline_id}}"
+    }
+   ]
+  },
+  {
+   "type": "row",
+   "title": "Gateway & scrape health",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 16
+   }
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "Gateway request rate (req/s)",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 0,
+    "y": 17
+   },
+   "targets": [
+    {
+     "expr": "sum (rate({\"http.server.request.duration_seconds_count\", job=\"gateway\"}[1m]))",
+     "legendFormat": "gateway"
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "type": "stat",
+   "title": "Scrape targets up",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 12,
+    "y": 17
+   },
+   "targets": [
+    {
+     "expr": "up",
+     "legendFormat": "{{job}}"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "type": "row",
+   "title": "Cost \u2014 tokens are money now (plan 003 Step 6)",
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 24
+   }
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Est. spend rate by pipeline ($/hour)",
+   "description": "llm_tokens_total priced at the dashboard's $-per-1M variables. CAVEAT: one price pair for all pipelines \u2014 graph-free (Groq free tier) actually costs $0, so treat its line as 'what this traffic WOULD cost on Azure'. Mock mode = all zeros (no token usage reported).",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 0,
+    "y": 25
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD"
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "expr": "(sum by (pipeline_id) (rate(llm_tokens_total{direction=\"prompt\"}[5m])) * $price_in_per_1m + sum by (pipeline_id) (rate(llm_tokens_total{direction=\"completion\"}[5m])) * $price_out_per_1m) * 3600 / 1000000",
+     "legendFormat": "{{pipeline_id}}"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "type": "stat",
+   "title": "Est. spend over dashboard time range ($, by pipeline)",
+   "description": "increase() of token counters over the selected range, priced by the same variables. This is the number to check after a demo session \u2014 and to compare against Azure's own Cost analysis view (they should agree within rounding; if not, the metrics are lying and THAT is the finding).",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 12,
+    "y": 25
+   },
+   "fieldConfig": {
+    "defaults": {
+     "unit": "currencyUSD",
+     "decimals": 4
+    },
+    "overrides": []
+   },
+   "targets": [
+    {
+     "expr": "(sum by (pipeline_id) (increase(llm_tokens_total{direction=\"prompt\"}[$__range])) * $price_in_per_1m + sum by (pipeline_id) (increase(llm_tokens_total{direction=\"completion\"}[$__range])) * $price_out_per_1m) / 1000000",
+     "legendFormat": "{{pipeline_id}}"
+    }
+   ]
+  }
+ ],
+ "templating": {
+  "list": [
+   {
+    "type": "constant",
+    "name": "price_in_per_1m",
+    "label": "Input $/1M tokens (CONFIRM vs your Azure pricing page)",
+    "query": "0.15",
+    "current": {
+     "text": "0.15",
+     "value": "0.15"
+    },
+    "hide": 0
+   },
+   {
+    "type": "constant",
+    "name": "price_out_per_1m",
+    "label": "Output $/1M tokens (CONFIRM vs your Azure pricing page)",
+    "query": "0.60",
+    "current": {
+     "text": "0.60",
+     "value": "0.60"
+    },
+    "hide": 0
+   }
   ]
+ }
 }
