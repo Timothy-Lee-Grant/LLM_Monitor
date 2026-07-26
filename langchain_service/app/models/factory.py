@@ -10,6 +10,16 @@ from langchain_openai import AzureChatOpenAI, AzureOpenAIEmbeddings, ChatOpenAI
 from app.models.Instructions import TryGetOllamaChatModel, TryGetOllamaEmbeddingModel
 from app.prompts.mock_prompts import MOCK_RESPONSES
 from langchain_ollama import OllamaEmbeddings
+from langchain_community.embeddings import FastEmbedEmbeddings
+
+# CPU embedding model for the openai_compat provider (Groq etc. serve no
+# embeddings endpoint at all — chat-only free tiers). bge-base-en-v1.5 is
+# 768-dim, matching nomic-embed-text and the Azure branch's dimensions=768:
+# same pgvector column schema across every mode/provider, no migration.
+# Runs on CPU via ONNX (fastembed) — no GPU, no account, no paid API;
+# weights are pulled from Hugging Face on first use and cached (see the
+# fastembed_cache volume in docker-compose.yaml) so restarts don't re-download.
+CPU_EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
 
 def _require_env(name: str) -> str:
@@ -221,12 +231,16 @@ class ModelFactory:
             )
 
         if provider == "openai_compat":
-            # Deliberate: Groq-class chat endpoints don't serve embeddings.
-            # RAG under the free tier isn't a thing we pretend to support.
-            raise RuntimeError(
-                "openai_compat has no embeddings path (chat-only free tiers). "
-                "Use provider='azure' (or 'ollama' with local hardware) for embeddings."
-            )
+            # Groq-class chat endpoints serve no embeddings at all, but startup
+            # RAG ingestion (Ingestion.py) always needs SOME embedding provider,
+            # regardless of which pipeline a request will eventually use — so
+            # this can't just raise (that crashes the whole service at boot,
+            # not merely the RAG pipelines). CPU/local via fastembed instead:
+            # free, account-free, and it keeps chat-rag/graph-rag/graph-premium
+            # genuinely live-testable on the Groq-only release. Model name is
+            # fixed here (not userDesiredModel) for the same reason the Azure
+            # branch ignores it: this is an infra choice, not a per-request one.
+            return FastEmbedEmbeddings(model_name=CPU_EMBEDDING_MODEL)
 
         if provider != "ollama":
             raise ValueError(f"Unknown LLM_PROVIDER {provider!r} for embeddings.")

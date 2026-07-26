@@ -94,11 +94,33 @@ def test_live_compat_chat_constructs_with_env_model(live):
     assert model.model_name == "llama-3.3-70b-versatile"
 
 
-def test_live_compat_embeddings_refuse_by_design(live):
+def test_live_compat_embeddings_use_cpu_fastembed(live, monkeypatch):
+    """openai_compat has no embeddings endpoint of its own (Groq etc. are
+    chat-only), but the factory now routes to a CPU-local model (fastembed)
+    instead of refusing — startup RAG ingestion needs SOME embedding
+    provider regardless of chat provider (see the Release-1.0 plan doc,
+    2026_07_25 verification entry: refusing here crashed the whole service
+    at boot, not just the RAG pipelines). Real fastembed construction loads
+    an ONNX session (real CPU work, possible first-run download) — this
+    file's stated invariant is offline/instant, so the class is stubbed
+    rather than paying that cost, same as every other test here avoids
+    the network."""
+    import app.models.factory as factory_module
+
+    calls = {}
+
+    class _StubFastEmbed:
+        def __init__(self, model_name):
+            calls["model_name"] = model_name
+
+    monkeypatch.setattr(factory_module, "FastEmbedEmbeddings", _StubFastEmbed)
     for k, v in COMPAT_ENV.items():
         live.setenv(k, v)
-    with pytest.raises(RuntimeError, match="no embeddings path"):
-        ModelFactory.get_embedding_model("x", provider="openai_compat")
+
+    emb = ModelFactory.get_embedding_model("x", provider="openai_compat")
+
+    assert isinstance(emb, _StubFastEmbed)
+    assert calls["model_name"] == factory_module.CPU_EMBEDDING_MODEL
 
 
 # ---- unknown ----

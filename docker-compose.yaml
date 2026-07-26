@@ -65,6 +65,11 @@ services:
       # DEV/TEST path only (CONTRACTS.md §6): direct access bypassing the gateway.
       # Deleting this mapping is the production lockdown switch — no code changes.
       - "5001:5000"
+    volumes:
+      # Persists the fastembed ONNX model (openai_compat's CPU embeddings
+      # provider, app/models/factory.py) across `--force-recreate` so live
+      # mode doesn't re-download ~100MB from Hugging Face on every restart.
+      - fastembed_cache:/tmp/fastembed_cache
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       # MCP tool discovery endpoint (plan 003; consumed from Step 2 on).
@@ -333,6 +338,7 @@ services:
 
 volumes:
   ollama_data:
+  fastembed_cache:
   pgdata:
   openwebui_data:
   prometheus_data:
