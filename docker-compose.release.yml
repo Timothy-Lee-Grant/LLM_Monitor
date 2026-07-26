@@ -1,0 +1,21 @@
+# Override for running PUBLISHED images instead of building from source.
+# Everything else (ports, environment, healthchecks, depends_on) is inherited
+# unchanged from docker-compose.yaml — only `image:` is added here; `build:`
+# stays in place too (Compose's standard pattern: `build` lets `docker compose
+# build` still work locally, `image` lets `pull`/`up` use the published tag
+# without ever invoking a build).
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.release.yml pull
+#   docker compose -f docker-compose.yaml -f docker-compose.release.yml up
+#
+# LLM_MONITOR_VERSION picks the tag — unset/default pulls `latest` (whatever
+# most recently published from `main`); set it to a specific `vX.Y.Z` tag for
+# a pinned, reproducible run. toolbox and openwebui are untouched here: they
+# already come from a registry (or gate their own build) in docker-compose.yaml.
+services:
+  dotnet_server:
+    image: ghcr.io/timothy-lee-grant/llm_monitor-gateway:${LLM_MONITOR_VERSION:-latest}
+
+  langchain_service:
+    image: ghcr.io/timothy-lee-grant/llm_monitor-langchain-service:${LLM_MONITOR_VERSION:-latest}
