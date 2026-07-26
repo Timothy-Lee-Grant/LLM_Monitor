@@ -40,6 +40,17 @@ services:
   toolbox:
     image: ghcr.io/timothy-lee-grant/tool_box:1.0.1
     container_name: toolbox
+    ports:
+      # Voxel viewer WebSocket ONLY — not the MCP endpoint (8080 stays unpublished,
+      # see below). This channel is receive-only/human-eyes-only (the agent never
+      # talks to it — VoxelViewerBroadcastService's own doc comment), so exposing
+      # it doesn't reopen the ADR-008/011 tool-execution lockdown; it just lets
+      # viewer/index.html, run on the host, watch this container's world build live.
+      # Requires the toolbox image to have the "+"-bind fix (VoxelViewerBroadcastService
+      # binding 127.0.0.1-only never accepted traffic through Docker's port mapping,
+      # regardless of this ports: entry) — a version after 1.0.1; bump the tag above
+      # once that's published, this line is a no-op until then.
+      - "8090:8090"
     environment:
       # Host-header allowlist (DNS-rebinding defense). "toolbox" is the name
       # this service is addressed by on the compose network — it MUST be
@@ -52,9 +63,10 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
-    # Deliberately NO `ports:` section — reachable ONLY on the internal
-    # compose network. Same lockdown posture as deleting langchain's 5001
-    # mapping: exposure must be a conscious config change.
+    # The MCP endpoint (8080) still has NO ports mapping — reachable only on the
+    # internal compose network. Same lockdown posture as deleting langchain's 5001
+    # mapping: exposure must be a conscious config change, and the viewer port above
+    # is exactly that — conscious, and scoped to a channel with no tool-execution power.
 
   langchain_service:
     build: 
