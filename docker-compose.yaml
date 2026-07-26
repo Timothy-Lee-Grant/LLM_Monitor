@@ -38,7 +38,7 @@ services:
   # NOT profile-gated on purpose (plan 003 Stage 1): tools are real and free
   # in both mock and live modes — only MODELS are mocked/paid.
   toolbox:
-    image: ghcr.io/timothy-lee-grant/tool_box:1.0.1
+    image: ghcr.io/timothy-lee-grant/tool_box:1.0.2
     container_name: toolbox
     ports:
       # Voxel viewer WebSocket ONLY — not the MCP endpoint (8080 stays unpublished,
