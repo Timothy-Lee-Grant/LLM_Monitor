@@ -55,19 +55,28 @@ Confirmed: pinning `mcp` below 2.0.0 (resolves to `1.29.0`) restores the import.
 
 **Current state I left the stack in:** `pgvector_service` and `toolbox` are up and healthy; `langchain_service` is `Exited (1)`; `dotnet_server` and `openwebui` are `Created` but never started (correct behavior — their `depends_on: condition: service_healthy` never resolved). Nothing was torn down, so you can inspect it directly if you want (`docker compose -p llm_monitor logs langchain_service`), or just apply the fix below and rebuild.
 
-#### Step-by-step fix (for you to do — I did not make this change)
+#### Step-by-step fix
 
-1. Open `langchain_service/requirements.txt`.
-2. Add a pin for `mcp` near the existing `langchain-mcp-adapters==0.3.0` line (same section, same "pin what we verified" convention already used there and for `langchain-openai==1.3.5`):
-   ```
-   mcp==1.29.0
-   ```
-3. Rebuild: `./build.sh --mode mock`.
-4. Verify: `docker compose -p llm_monitor ps` — all five core services (`pgvector-service`, `toolbox`, `langchain_service`, `dotnet_server`, `openwebui`) should show `healthy`/`Up`.
-5. Run the acceptance script end-to-end: `bash scripts/acceptance_check.sh mock`.
-6. Worth deciding while you're in there: is `mcp==1.29.0` actually the version you want pinned (double-check it against `langchain-mcp-adapters==0.3.0`'s own declared compatibility, not just "the number that happened to work today"), and is this a good moment to look at whether any *other* unpinned line in that `requirements.txt` (`flask`, `langchain-core`, `langgraph`, `langchain-postgres`, `langchain-ollama`, etc.) deserves the same treatment before it bites you the same way. A month of dependency drift on an unpinned line is exactly the gap that just caused this outage — the same gap exists on several other lines in that file right now.
+**Applied 2026-08-23, with your explicit go-ahead** (you said "fix it" after I flagged the tension with CLAUDE.md's no-code-edits rule and you confirmed the exception). What was done:
 
-## 3. Suggested order of operations from here
+1. Added `mcp==1.29.0` to `langchain_service/requirements.txt`, right after `langchain-mcp-adapters==0.3.0`, with a comment explaining why (dated, links back to this doc) — same "pin what we verified" convention already used for `langchain-openai==1.3.5`.
+2. Rebuilt with `./build.sh --mode live --obs` (the mode you were actually trying). `langchain_service` booted clean — RAG ingestion ran, gunicorn came up, `/healthz` returned `{"mode":"live","status":"ok"}`, no `ImportError`.
+3. Confirmed `dotnet_server` and `openwebui` then started too (they were blocked purely by `langchain_service`'s health-check dependency). `localhost:5000/v1/models` returned all 7 registered pipelines. `localhost:3000` (OpenWebUI) came up `healthy` and returned `HTTP 200` — the original complaint is resolved.
 
-1. Apply the `mcp` pin above and confirm the full stack boots clean (`acceptance_check.sh mock` passing).
-2. Resume `Documentation/AI_Implementation_Plans/005-Memory_And_Voxel_World_Continuity.md` at **Stage 4, Step 1** (activate `thread_id` on the wire contract) — the plan is fully negotiated and ready to implement one step at a time, per your usual staged-permission process.
+**Still worth doing yourself, not done here:** double-check `mcp==1.29.0` against `langchain-mcp-adapters==0.3.0`'s own declared compatibility (not just "the number that happened to work"), and decide whether the *other* unpinned lines in that file (`flask`, `langchain-core`, `langgraph`, `langchain-postgres`, `langchain-ollama`, etc.) deserve the same treatment — this exact gap (pin the direct dependency, leave its transitive dependency unpinned) is what caused this outage, and it still exists on several other lines.
+
+## 3. New finding while verifying the fix: `--obs` mode OOM-kills Langfuse on this machine
+
+While confirming the full `--mode live --obs` stack, `langfuse_web` was silently killed (`docker inspect` confirms `OOMKilled: true`, exit 137) a few minutes after startup. **Root cause: this Mac has 8GB of total RAM, and Docker Desktop's Linux VM is currently capped at 3072 MiB.** Running the full `--obs` profile means 15 containers at once — the core app stack (5) plus Jaeger, Prometheus, Grafana, otel-collector, and Langfuse's *entire* self-hosted stack (web, worker, its own Postgres, ClickHouse, Redis, MinIO — 6 containers by itself). That doesn't fit in 3GB, and Langfuse's Next.js web process is what lost the OOM lottery this time; a different container could next time.
+
+This isn't a code bug — nothing to fix in the repo — but it's a real operational constraint worth knowing before you rely on `--obs` for a demo or a work session:
+
+- **Cheapest mitigation:** bump Docker Desktop's memory allocation (Docker Desktop → Settings → Resources → Memory) from 3072 MiB to something higher — but with only 8GB total and macOS itself needing headroom, there's not a lot of slack to give it on this machine.
+- **Cheaper still, for day-to-day work:** don't run `--obs` unless you're actually working on/demoing observability. `./build.sh --mode mock` or `--mode live` (no `--obs`) is 5 containers instead of 15 and won't come close to this ceiling.
+- **Longer-term, worth a real decision rather than me picking for you:** self-hosted Langfuse is the single heaviest piece of the whole `--obs` profile (6 of the 15 containers). Given this machine's RAM ceiling is a recurring theme (it's also why live mode moved off local Ollama in plan 003), it may be worth weighing self-hosted Langfuse against Langfuse Cloud's free tier the next time you're touching the observability stack — that would cut `--obs` from 15 containers to 10.
+
+## 4. Suggested order of operations from here
+
+1. ~~Apply the `mcp` pin and confirm the full stack boots clean~~ — done above; stack is currently up and verified in `--mode live --obs`.
+2. If you plan to keep `--obs` running for a while, watch for OOM kills (`docker compose -p llm_monitor ps -a` — any core-path container showing `Exited (137)` is worth an `docker inspect <name> --format '{{.State.OOMKilled}}'` check) or just switch to `--mode live` without `--obs` for regular work.
+3. Resume `Documentation/AI_Implementation_Plans/005-Memory_And_Voxel_World_Continuity.md` at **Stage 4, Step 1** (activate `thread_id` on the wire contract) — the plan is fully negotiated and ready to implement one step at a time, per your usual staged-permission process.
