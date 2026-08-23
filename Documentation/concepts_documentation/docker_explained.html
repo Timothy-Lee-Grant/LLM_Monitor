@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docker, Read Off Your Own Screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --bg:        #f1f4f6;
+    --surface:   #ffffff;
+    --surface-2: #e8edf1;
+    --ink:       #0f1720;
+    --ink-2:     #4c5a68;
+    --ink-3:     #7c8a97;
+    --rule:      #ccd6de;
+    --rule-soft: #dfe6ec;
+    --accent:    #0f6480;
+    --accent-2:  #dceaef;
+    --registry:  #6a56a8;
+    --registry-2:#e8e3f5;
+    --dormant:   #8a96a1;
+    --warn:      #a8650c;
+    --shadow:    0 1px 2px rgba(15,23,32,.06), 0 8px 24px -16px rgba(15,23,32,.28);
+
+    --f-display: "IBM Plex Sans Condensed", "Helvetica Neue", Arial, sans-serif;
+    --f-body:    "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --f-mono:    "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --col: 70ch;
+    --wide: 1060px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #0d1218;
+      --surface:   #141c24;
+      --surface-2: #1b242e;
+      --ink:       #e4ecf2;
+      --ink-2:     #9fb0be;
+      --ink-3:     #75858f;
+      --rule:      #27333e;
+      --rule-soft: #1f2a34;
+      --accent:    #57bcd8;
+      --accent-2:  #0f2d38;
+      --registry:  #a996e6;
+      --registry-2:#231e38;
+      --dormant:   #6c7984;
+      --warn:      #d5a04e;
+      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #0d1218;
+    --surface:   #141c24;
+    --surface-2: #1b242e;
+    --ink:       #e4ecf2;
+    --ink-2:     #9fb0be;
+    --ink-3:     #75858f;
+    --rule:      #27333e;
+    --rule-soft: #1f2a34;
+    --accent:    #57bcd8;
+    --accent-2:  #0f2d38;
+    --registry:  #a996e6;
+    --registry-2:#231e38;
+    --dormant:   #6c7984;
+    --warn:      #d5a04e;
+    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    margin: 0;
+    padding: 0 20px 120px;
+  }
+
+  .col   { max-width: var(--col);  margin-inline: auto; }
+  .wide  { max-width: var(--wide); margin-inline: auto; }
+
+  /* ---------- masthead ---------- */
+  header.masthead {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 72px 0 28px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(38px, 6.5vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0 0 20px;
+  }
+  .standfirst {
+    font-size: 19px;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 0 0 8px;
+  }
+  .masthead-meta {
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    color: var(--ink-3);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+    margin-top: 26px;
+  }
+
+  /* ---------- contents ---------- */
+  nav.toc {
+    max-width: var(--wide);
+    margin: 0 auto 72px;
+    padding: 26px 0 4px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .toc ol {
+    list-style: none;
+    margin: 0; padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
+    gap: 2px 34px;
+  }
+  .toc a {
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+    padding: 7px 0;
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule-soft);
+    font-size: 15px;
+  }
+  .toc a:hover { color: var(--accent); }
+  .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .toc .n {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    color: var(--accent);
+    min-width: 20px;
+  }
+
+  /* ---------- sections ---------- */
+  section { margin-bottom: 82px; }
+  .sec-head { max-width: var(--wide); margin: 0 auto 28px; }
+  .sec-num {
+    font-family: var(--f-mono);
+    font-size: 12px;
+    letter-spacing: .14em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 10px;
+  }
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(26px, 3.4vw, 36px);
+    line-height: 1.12;
+    letter-spacing: -.01em;
+    text-wrap: balance;
+    margin: 0;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: .002em;
+    margin: 38px 0 10px;
+  }
+  p { margin: 0 0 18px; }
+  .col > p, .col > ul, .col > ol { max-width: var(--col); }
+  a { color: var(--accent); }
+
+  ul, ol { padding-left: 22px; margin: 0 0 18px; }
+  li { margin-bottom: 8px; }
+
+  code {
+    font-family: var(--f-mono);
+    font-size: .875em;
+    background: var(--surface-2);
+    border-radius: 3px;
+    padding: 1.5px 5px;
+    word-break: break-word;
+  }
+  strong { font-weight: 600; }
+
+  /* ---------- callouts ---------- */
+  .answer {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    box-shadow: var(--shadow);
+    padding: 24px 28px;
+    margin: 0 0 30px;
+  }
+  .answer .label {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 10px;
+  }
+  .answer p:last-child { margin-bottom: 0; }
+
+  .note {
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 16px 0;
+    margin: 26px 0;
+    font-size: 15.5px;
+    color: var(--ink-2);
+  }
+  .note .label {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--warn);
+    margin-right: 10px;
+  }
+  .note p:last-child { margin-bottom: 0; }
+
+  /* ---------- code blocks ---------- */
+  pre {
+    font-family: var(--f-mono);
+    font-size: 13.5px;
+    line-height: 1.6;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 0 0 22px;
+    tab-size: 2;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .cm { color: var(--ink-3); }
+  .hi { color: var(--accent); font-weight: 500; }
+  .hi2 { color: var(--registry); font-weight: 500; }
+
+  /* ---------- tables ---------- */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 0 0 24px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  th {
+    font-family: var(--f-mono);
+    font-weight: 500;
+    font-size: 11.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+    background: var(--surface-2);
+  }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.mono, th.mono { font-family: var(--f-mono); font-size: 12.5px; }
+  td .sub { display: block; color: var(--ink-3); font-size: 12px; font-family: var(--f-body); }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+  .pill.built    { background: var(--accent-2);   color: var(--accent); }
+  .pill.pulled   { background: var(--registry-2); color: var(--registry); }
+  .pill.dormant  { background: var(--surface-2);  color: var(--dormant); }
+
+  /* ---------- diagram ---------- */
+  figure {
+    margin: 0 0 30px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+    padding: 26px 20px 18px;
+    overflow-x: auto;
+  }
+  figure svg { display: block; margin: 0 auto; min-width: 640px; max-width: 100%; height: auto; }
+  figcaption {
+    font-size: 13.5px;
+    color: var(--ink-3);
+    text-align: center;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule-soft);
+  }
+  .svg-box    { fill: var(--surface); stroke: var(--rule); stroke-width: 1.5; }
+  .svg-box-a  { fill: var(--accent-2); stroke: var(--accent); stroke-width: 1.5; }
+  .svg-t      { fill: var(--ink); font-family: var(--f-display); font-size: 16px; font-weight: 600; }
+  .svg-m      { fill: var(--ink-2); font-family: var(--f-mono); font-size: 11.5px; }
+  .svg-lab    { fill: var(--accent); font-family: var(--f-mono); font-size: 10.5px; letter-spacing: .1em; }
+  .svg-dim    { fill: var(--ink-3); font-family: var(--f-mono); font-size: 11px; }
+  .svg-line   { stroke: var(--ink-3); stroke-width: 1.5; fill: none; }
+
+  /* ---------- panel grid ---------- */
+  .grid2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+    margin: 0 0 26px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .panel h4 {
+    font-family: var(--f-display);
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  .panel p { font-size: 14.5px; color: var(--ink-2); margin: 0 0 10px; }
+  .panel p:last-child { margin-bottom: 0; }
+  .panel .where {
+    font-family: var(--f-mono);
+    font-size: 11.5px;
+    color: var(--accent);
+    display: block;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--rule-soft);
+  }
+
+  /* ---------- arithmetic strip ---------- */
+  .counts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0 0 26px;
+  }
+  .count {
+    background: var(--surface);
+    padding: 18px 20px;
+  }
+  .count .num {
+    font-family: var(--f-display);
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .count .cap {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-top: 8px;
+    display: block;
+  }
+
+  footer {
+    max-width: var(--wide);
+    margin: 90px auto 0;
+    padding-top: 26px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--f-mono);
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; padding: 0 16px 80px; }
+    header.masthead { padding-top: 48px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <p class="eyebrow">LLM_Monitor · Docker field manual</p>
+  <h1>Docker, Read Off Your&nbsp;Own Screen</h1>
+  <p class="standfirst">Every box, name, and number in your Docker Desktop window traced back to the exact line in <code>docker-compose.yaml</code> that produced it.</p>
+  <div class="masthead-meta">
+    <span>16 services defined</span>
+    <span>5 awake</span>
+    <span>5 images</span>
+    <span>3 volumes</span>
+    <span>2 builds</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#s1"><span class="n">01</span><span>The thirty-second model</span></a></li>
+    <li><a href="#s2"><span class="n">02</span><span>A service is not a thing</span></a></li>
+    <li><a href="#s3"><span class="n">03</span><span>Your five images</span></a></li>
+    <li><a href="#s4"><span class="n">04</span><span>Your containers, and the one row</span></a></li>
+    <li><a href="#s5"><span class="n">05</span><span>The Builds tab</span></a></li>
+    <li><a href="#s6"><span class="n">06</span><span>Volumes: what survives</span></a></li>
+    <li><a href="#s7"><span class="n">07</span><span>Ports, in both directions</span></a></li>
+    <li><a href="#s8"><span class="n">08</span><span>The network you can't see</span></a></li>
+    <li><a href="#s9"><span class="n">09</span><span>build: versus image:</span></a></li>
+    <li><a href="#s10"><span class="n">10</span><span>Startup order and health</span></a></li>
+    <li><a href="#s11"><span class="n">11</span><span>The eleven missing services</span></a></li>
+    <li><a href="#s12"><span class="n">12</span><span>build.sh, line by line</span></a></li>
+    <li><a href="#s13"><span class="n">13</span><span>Button to command</span></a></li>
+    <li><a href="#s14"><span class="n">14</span><span>The confusions, settled</span></a></li>
+  </ol>
+</nav>
+
+<!-- ================= 01 ================= -->
+<section id="s1">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <h2>The thirty-second model</h2>
+  </div>
+  <div class="col">
+    <p>Three nouns, in a fixed order. Everything else in Docker is detail hanging off them.</p>
+    <p>A <strong>Dockerfile</strong> is a recipe — a text file of build steps. A <strong>image</strong> is what the recipe bakes: a frozen, read-only filesystem snapshot with a startup command baked in. A <strong>container</strong> is one running instance of an image — the image plus a writable scratch layer, a process, an IP address, and a lifespan.</p>
+    <p>The relationship is one-way and one-to-many. A Dockerfile builds an image. An image can start any number of containers. A container can never modify its image. Delete every container and the image is untouched; that is precisely why your five images survive a <code>docker compose down</code>.</p>
+    <p>Your project adds a fourth noun that isn't part of Docker itself: <strong>Compose</strong>. <code>docker-compose.yaml</code> is a cast list. It names 16 <em>services</em>, and a service is a set of instructions for producing containers — which image to use or build, what to name the container, which ports to publish, what to mount. Compose is the layer that turns "run sixteen <code>docker run</code> commands with the right flags in the right order" into one command.</p>
+  </div>
+</section>
+
+<!-- ================= 02 ================= -->
+<section id="s2">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <h2>A service is not a thing — it produces things</h2>
+  </div>
+  <div class="wide">
+    <div class="answer">
+      <span class="label">Your question, answered</span>
+      <p><strong>When you write a service name in <code>docker-compose.yaml</code>, you have created neither an image nor a container.</strong> You've written a recipe entry. When you run <code>build</code>, that entry produces an <em>image</em> whose name Compose derives from yours. When you run <code>up</code>, that image produces a <em>container</em> whose name Compose derives from yours too — unless you overrode it with <code>container_name:</code>, which you did for every service in this project.</p>
+      <p>So one service name shows up in up to three places on your screen, spelled three different ways. That is the single biggest source of the confusion.</p>
+    </div>
+  </div>
+
+  <div class="wide">
+    <figure>
+      <svg viewBox="0 0 900 320" role="img" aria-label="Diagram: the server folder builds an image, which runs as a container">
+        <!-- recipe -->
+        <rect class="svg-box" x="8" y="60" width="200" height="96" rx="3"/>
+        <text class="svg-lab" x="24" y="84">RECIPE · ON DISK</text>
+        <text class="svg-m" x="24" y="108">./server/dockerfile</text>
+        <text class="svg-m" x="24" y="126">+ ./server/*.cs</text>
+        <text class="svg-dim" x="24" y="146">the build context</text>
+
+        <path class="svg-line" d="M212 108 H 300" marker-end="url(#ar)"/>
+        <text class="svg-dim" x="216" y="98">docker compose build</text>
+        <text class="svg-dim" x="216" y="128">≈ 35.6s</text>
+
+        <!-- image -->
+        <rect class="svg-box-a" x="304" y="46" width="250" height="124" rx="3"/>
+        <text class="svg-lab" x="322" y="72">IMAGE · FROZEN, READ-ONLY</text>
+        <text class="svg-t" x="322" y="98">llm_monitor-</text>
+        <text class="svg-t" x="322" y="118">dotnet_server:latest</text>
+        <text class="svg-m" x="322" y="142">1449eceb3c54 · 286.61 MB</text>
+        <text class="svg-dim" x="322" y="160">Images tab</text>
+
+        <path class="svg-line" d="M558 108 H 646" marker-end="url(#ar)"/>
+        <text class="svg-dim" x="562" y="98">docker compose up</text>
+
+        <!-- container -->
+        <rect class="svg-box" x="650" y="46" width="242" height="124" rx="3"/>
+        <text class="svg-lab" x="668" y="72">CONTAINER · RUNNING</text>
+        <text class="svg-t" x="668" y="98">dotnet_server</text>
+        <text class="svg-m" x="668" y="122">image + writable layer</text>
+        <text class="svg-m" x="668" y="140">+ PID 1 + an IP</text>
+        <text class="svg-dim" x="668" y="160">Containers tab</text>
+
+        <!-- attachments -->
+        <path class="svg-line" d="M700 174 V 214" marker-end="url(#ar)"/>
+        <rect class="svg-box" x="650" y="218" width="242" height="66" rx="3"/>
+        <text class="svg-lab" x="668" y="242">PORT PUBLISH</text>
+        <text class="svg-m" x="668" y="266">localhost:5000 → :8080</text>
+
+        <path class="svg-line" d="M430 174 V 214" marker-end="url(#ar)"/>
+        <rect class="svg-box" x="304" y="218" width="250" height="66" rx="3"/>
+        <text class="svg-lab" x="322" y="242">SERVICE KEY IN YAML</text>
+        <text class="svg-m" x="322" y="266">dotnet_server:</text>
+
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0 0 L10 5 L0 10 z" fill="currentColor" style="color: var(--ink-3)"/>
+          </marker>
+        </defs>
+      </svg>
+      <figcaption>One service key, <code>dotnet_server</code>, and the two separate artifacts it produced — the image you see in the Images tab and the container you see in the Containers tab.</figcaption>
+    </figure>
+  </div>
+
+  <div class="col">
+    <h3>The three naming rules</h3>
+    <p>Learn these and the screens stop being mysterious.</p>
+    <ol>
+      <li><strong>Image name</strong> (only for services with <code>build:</code>) = <code>&lt;project&gt;-&lt;service key&gt;</code>. Your project name is <code>llm_monitor</code>, set explicitly by <code>-p "$PROJECT"</code> in <code>build.sh</code>. Service key <code>dotnet_server</code> → image <code>llm_monitor-dotnet_server:latest</code>. That's the truncated <code>llm_monitor-dotnet_serv…</code> row on your Images tab.</li>
+      <li><strong>Container name</strong> = whatever <code>container_name:</code> says. You set one on every service, so the names are exactly as written — <code>dotnet_server</code>, <code>langchain_service</code>, <code>toolbox</code>, <code>openwebui</code>, <code>pgvector_service</code>. Without <code>container_name:</code>, Compose would have generated <code>llm_monitor-dotnet_server-1</code> instead.</li>
+      <li><strong>Volume name</strong> = <code>&lt;project&gt;_&lt;volume key&gt;</code>. Volume key <code>pgdata</code> → <code>llm_monitor_pgdata</code>. Exactly what your Volumes tab shows.</li>
+    </ol>
+    <div class="note">
+      <p><span class="label">Watch this</span>Your service key is <code>pgvector-service</code> with a hyphen, but its container is named <code>pgvector_service</code> with an underscore, because <code>container_name:</code> says so. Compose commands take the <em>service key</em> (<code>docker compose logs pgvector-service</code>); plain Docker commands take the <em>container name</em> (<code>docker logs pgvector_service</code>). Mixing them up is the most common "no such service" error you will hit.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 ================= -->
+<section id="s3">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <h2>Your five images, and where each came from</h2>
+  </div>
+  <div class="col">
+    <p>An image arrives one of two ways: you <strong>build</strong> it from source on this machine, or you <strong>pull</strong> it prebuilt from a registry. Your five split three-to-two.</p>
+  </div>
+  <div class="wide">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Image on your screen</th>
+            <th>Origin</th>
+            <th>Compose service</th>
+            <th>Size</th>
+            <th>Why that size</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">ghcr.io/open-webui/open-webui:0.10.2</td>
+            <td><span class="pill pulled">pulled</span></td>
+            <td class="mono">openwebui</td>
+            <td class="mono">4.49 GB</td>
+            <td>Ships a whole Python ML stack, incl. torch. It dwarfs everything else you run.</td>
+          </tr>
+          <tr>
+            <td class="mono">llm_monitor-langchain_service:latest</td>
+            <td><span class="pill built">built here</span></td>
+            <td class="mono">langchain_service</td>
+            <td class="mono">602.91 MB</td>
+            <td><code>python:3.11-slim</code> plus everything in <code>requirements.txt</code>.</td>
+          </tr>
+          <tr>
+            <td class="mono">pgvector/pgvector:pg16</td>
+            <td><span class="pill pulled">pulled</span></td>
+            <td class="mono">pgvector-service</td>
+            <td class="mono">459.18 MB</td>
+            <td>Postgres 16 with the vector extension compiled in.</td>
+          </tr>
+          <tr>
+            <td class="mono">llm_monitor-dotnet_server:latest</td>
+            <td><span class="pill built">built here</span></td>
+            <td class="mono">dotnet_server</td>
+            <td class="mono">286.61 MB</td>
+            <td>Only the ASP.NET <em>runtime</em> plus your published DLLs — the SDK stage was discarded. See below.</td>
+          </tr>
+          <tr>
+            <td class="mono">ghcr.io/timothy-lee-grant/tool_box:1.0.2</td>
+            <td><span class="pill pulled">pulled</span></td>
+            <td class="mono">toolbox</td>
+            <td class="mono">270.56 MB</td>
+            <td>Your own MCP tool server — you built it in a <em>different</em> repo and published it. Here it's just a pull.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col">
+    <p>The <code>Created</code> column tells the same story from another angle: the two <code>llm_monitor-*</code> rows say <em>19 minutes ago</em> because they were baked by your last <code>./build.sh</code> run. The three pulled rows say 2 months / 10 days / 29 days — those are the dates the <em>publisher</em> built them, not when you downloaded them.</p>
+
+    <h3>Why your .NET image is only 287 MB</h3>
+    <p>Because <code>server/dockerfile</code> is a multi-stage build, and this is the single most useful Dockerfile idea to internalize:</p>
+    <pre><code><span class="cm"># STAGE 1 — has the whole SDK, compilers, NuGet cache</span>
+FROM mcr.microsoft.com/dotnet/sdk:11.0-preview AS build-env
+COPY *.csproj ./
+RUN dotnet restore --no-cache
+COPY . ./
+RUN dotnet publish -c Release -o /app/publish
+
+<span class="cm"># STAGE 2 — a fresh, much smaller base</span>
+FROM mcr.microsoft.com/dotnet/aspnet:11.0-preview
+<span class="hi">COPY --from=build-env /app/publish .</span>   <span class="cm"># ← reach back, take only the output</span>
+ENTRYPOINT ["dotnet", "server.dll"]</code></pre>
+    <p>Only the <em>last</em> <code>FROM</code> becomes your image. Stage 1 — SDK, source, intermediate build junk, several gigabytes of it — is thrown away, and the one highlighted line copies the compiled output across the boundary. That's how a .NET service ends up smaller than a Python one.</p>
+
+    <h3>Layer caching, and why the COPY order matters</h3>
+    <p>Each instruction in a Dockerfile makes a cached layer. Docker reuses a layer if that instruction and its inputs are unchanged; the moment one changes, that layer and <em>everything after it</em> rebuild. Both your Dockerfiles exploit this the same way — dependencies first, source second:</p>
+    <pre><code>COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt   <span class="cm"># slow layer</span>
+COPY . .                                             <span class="cm"># fast layer, changes constantly</span></code></pre>
+    <p>Edit a Python file and only the last line reruns. Reverse the two and every one-character edit reinstalls every dependency. This is why <code>langchain_service</code> took 1m 11s to build the first time and would take seconds on a source-only change.</p>
+
+    <div class="note">
+      <p><span class="label">On that "0 Bytes in use"</span>The Images tab header reads <code>4.84 GB / 0 Bytes in use</code> with <em>Last refresh: 22 minutes ago</em> beside it — a stale count, taken before your containers started. Click the refresh arrow and it will attribute the in-use bytes properly. Relatedly, you have no dangling <code>&lt;none&gt;</code> images cluttering the list because <code>build.sh</code> ends with <code>docker image prune -f</code>, which deletes images no container references.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 ================= -->
+<section id="s4">
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <h2>Your containers, and why the list shows one row</h2>
+  </div>
+  <div class="col">
+    <p>The Containers tab shows a single row named <code>llm_monitor</code> with a <code>&gt;</code> chevron, blank Container ID, blank Image, blank Ports. That row is <strong>not a container</strong>. It is the Compose <em>project group</em> — Docker Desktop collapses every container that shares a project label into one expandable row. The blanks are blank because a group has no single ID, image, or port. Click the chevron and your five real containers appear underneath.</p>
+    <p>The group is named <code>llm_monitor</code> because of <code>-p "$PROJECT"</code> in <code>build.sh</code>. Without that flag Compose would have named the project after the folder — <code>LLM_Monitor</code> lowercased — and every image and volume prefix would follow along. Pinning it explicitly is why your names are stable no matter which directory you invoke from.</p>
+  </div>
+  <div class="wide">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Container</th>
+            <th>From image</th>
+            <th>Reachable at</th>
+            <th>Job in your system</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">openwebui</td>
+            <td class="mono">ghcr.io/open-webui/open-webui:0.10.2</td>
+            <td class="mono">localhost:3000</td>
+            <td>The chat UI you actually type into.</td>
+          </tr>
+          <tr>
+            <td class="mono">dotnet_server</td>
+            <td class="mono">llm_monitor-dotnet_server</td>
+            <td class="mono">localhost:5000</td>
+            <td>The gateway. Telemetry middleware, then YARP proxies onward.</td>
+          </tr>
+          <tr>
+            <td class="mono">langchain_service</td>
+            <td class="mono">llm_monitor-langchain_service</td>
+            <td class="mono">localhost:5001<span class="sub">dev-only escape hatch</span></td>
+            <td>Gunicorn, 2 workers. The actual LLM pipeline and RAG.</td>
+          </tr>
+          <tr>
+            <td class="mono">toolbox</td>
+            <td class="mono">ghcr.io/…/tool_box:1.0.2</td>
+            <td class="mono">localhost:8090<span class="sub">viewer socket only</span></td>
+            <td>MCP tool server. Its MCP port 8080 is deliberately unpublished.</td>
+          </tr>
+          <tr>
+            <td class="mono">pgvector_service</td>
+            <td class="mono">pgvector/pgvector:pg16</td>
+            <td class="mono">— not published —</td>
+            <td>Vector store. Only other containers can reach it.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col">
+    <p>Read that top to bottom and you have your request path: a message typed at <code>:3000</code> goes to <code>dotnet_server</code>, which proxies to <code>langchain_service</code>, which queries <code>pgvector_service</code> for context and <code>toolbox</code> for tools. Five containers, one conversation.</p>
+    <p>The footer numbers describe the whole VM, not one container: <code>RAM 2.46 GB</code> is Docker Desktop's Linux VM, <code>Disk: 7.95 GB used (limit 58.37 GB)</code> is its disk image, and the header's <code>177.76 MB / 2.78 GB</code> is what your five containers are actually consuming inside it. Your stack is using about 6% of the memory allotted to it.</p>
+  </div>
+</section>
+
+<!-- ================= 05 ================= -->
+<section id="s5">
+  <div class="sec-head">
+    <span class="sec-num">05</span>
+    <h2>The Builds tab: two rows, and a name that isn't a service</h2>
+  </div>
+  <div class="col">
+    <p>Build history shows <code>server</code> (35.6s) and <code>langchain_service</code> (1m 11s). Two rows for sixteen services, because only two services have a <code>build:</code> key — everything else pulls a prebuilt image and never touches the builder.</p>
+    <p>Now the detail that trips people: the first row says <strong><code>server</code></strong>, but you have no service called <code>server</code>. The Builds tab names a build after its <strong>build context directory</strong>, not the service. Look at the YAML:</p>
+    <pre><code>dotnet_server:          <span class="cm"># ← service key → image name</span>
+  build:
+    context: <span class="hi">./server</span>       <span class="cm"># ← folder → Builds tab name</span>
+    dockerfile: dockerfile</code></pre>
+    <p><code>langchain_service</code> matches only because its folder happens to share the service's name. So that's a fourth naming source: service key, container_name, volume key, and now build context folder.</p>
+    <p>The context is also a real functional boundary. It is the set of files shipped to the build daemon, and <code>COPY</code> can only see inside it — which is why <code>server/dockerfile</code> writes <code>COPY *.csproj ./</code> and not <code>COPY server/*.csproj</code>. The paths are relative to <code>./server</code>, not to the repo root.</p>
+    <p><code>Builder: desktop-linux</code> on both rows is the BuildKit instance inside Docker Desktop's VM. <code>Author: N/A</code> just means you weren't signed in to Docker Hub. Neither indicates a problem, and both green checkmarks mean the builds succeeded.</p>
+  </div>
+</section>
+
+<!-- ================= 06 ================= -->
+<section id="s6">
+  <div class="sec-head">
+    <span class="sec-num">06</span>
+    <h2>Volumes: the only things that survive</h2>
+  </div>
+  <div class="col">
+    <p>A container's writable layer dies with the container. Anything that must outlive <code>--force-recreate</code> — and <code>build.sh</code> recreates every container on every run — has to live in a volume: a directory managed by Docker, outside any container, mounted into one at a path you choose.</p>
+    <p>The syntax is <code>volume_name:/path/inside/container</code>. Your three:</p>
+  </div>
+  <div class="wide">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Volume on your screen</th><th>Declared as</th><th>Mounted into</th><th>Size</th><th>Holds</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="mono">llm_monitor_openwebui_data</td>
+            <td class="mono">openwebui_data:/app/backend/data</td>
+            <td class="mono">openwebui</td>
+            <td class="mono">264.2 MB</td>
+            <td>Accounts, chat history, settings. Delete this and your <code>admin@localhost</code> login is gone.</td>
+          </tr>
+          <tr>
+            <td class="mono">llm_monitor_pgdata</td>
+            <td class="mono">pgdata:/var/lib/postgresql/data</td>
+            <td class="mono">pgvector_service</td>
+            <td class="mono">46 MB</td>
+            <td>The whole Postgres cluster — your embeddings and RAG documents.</td>
+          </tr>
+          <tr>
+            <td class="mono">llm_monitor_fastembed_cache</td>
+            <td class="mono">fastembed_cache:/tmp/fastembed_cache</td>
+            <td class="mono">langchain_service</td>
+            <td class="mono">0 Bytes</td>
+            <td>Should hold a ~100 MB ONNX embedding model — see below.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col">
+    <div class="note">
+      <p><span class="label">That 0 Bytes is a fact, not a bug</span>The fastembed cache is empty because you are running in <strong>mock mode</strong>. That model is only downloaded by the <code>openai_compat</code> CPU embeddings provider in live mode. An empty volume here is exactly what a healthy mock run looks like — and the first live run will fill it, then keep it filled across restarts, which is the entire reason the volume exists.</p>
+    </div>
+
+    <h3>A second kind of mount, which isn't in the tab</h3>
+    <p>Volumes aren't the only thing that can be mounted. Compare these two lines from your file:</p>
+    <pre><code>volumes:
+  - <span class="hi">pgdata</span>:/var/lib/postgresql/data                              <span class="cm"># named volume</span>
+  - <span class="hi2">./scripts/init.sql</span>:/docker-entrypoint-initdb.d/init.sql:ro   <span class="cm"># bind mount</span></code></pre>
+    <p>The first is a <strong>named volume</strong> — Docker owns the storage, and it appears in the Volumes tab. The second is a <strong>bind mount</strong> — a path on your Mac projected into the container, owned by you, and it never appears in the Volumes tab at all. That's why your observability configs (<code>./observability/prometheus.yml</code>, the Grafana provisioning folders) are invisible there even when running: they're bind mounts, not volumes. The <code>:ro</code> suffix makes them read-only inside the container.</p>
+    <p>Practical consequence: editing <code>scripts/init.sql</code> on your Mac changes what the container sees immediately, because it's the same file. Changing something inside <code>pgdata</code> requires going through Postgres.</p>
+    <p>One more trap worth knowing now rather than later: <code>init.sql</code> runs <em>only</em> when the data directory is empty — i.e. on a brand-new <code>pgdata</code> volume. Editing it after the fact does nothing until you delete the volume. <code>docker compose down</code> leaves volumes alone by design; <code>docker compose down -v</code> is what wipes them.</p>
+  </div>
+</section>
+
+<!-- ================= 07 ================= -->
+<section id="s7">
+  <div class="sec-head">
+    <span class="sec-num">07</span>
+    <h2>Ports, in both directions</h2>
+  </div>
+  <div class="col">
+    <p>A container gets its own network namespace — its own private IP, its own full set of 65535 ports. Nothing on your Mac can reach any of them unless you explicitly publish one. That's what <code>ports:</code> does, and the order is always <strong><code>HOST:CONTAINER</code></strong>.</p>
+    <pre><code>dotnet_server:
+  ports:
+    - "<span class="hi">5000</span>:<span class="hi2">8080</span>"
+       <span class="cm">↑     ↑</span>
+       <span class="cm">│     └── the port the app listens on inside the container</span>
+       <span class="cm">└──────── the port you type into your browser on the Mac</span></code></pre>
+    <p>The container side is fixed by the app: ASP.NET defaults to 8080 (which is why the Dockerfile says <code>EXPOSE 8080</code>), gunicorn binds <code>0.0.0.0:5000</code> in your entrypoint, OpenWebUI serves on 8080. The host side is yours to choose, and its only constraint is that no two services may claim the same one — which is exactly why your file has that trail of comments about 3000 being OpenWebUI, 3001 Grafana, 3002 Langfuse.</p>
+  </div>
+  <div class="wide">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Service</th><th>Mapping</th><th>You type</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">openwebui</td><td class="mono">3000:8080</td><td class="mono">localhost:3000</td><td>Your front door.</td></tr>
+          <tr><td class="mono">dotnet_server</td><td class="mono">5000:8080</td><td class="mono">localhost:5000</td><td>The gateway, same container port as OpenWebUI — no conflict, different containers.</td></tr>
+          <tr><td class="mono">langchain_service</td><td class="mono">5001:5000</td><td class="mono">localhost:5001</td><td>Dev/test bypass. Deleting this line is your production lockdown switch.</td></tr>
+          <tr><td class="mono">toolbox</td><td class="mono">8090:8090</td><td class="mono">localhost:8090</td><td>Voxel viewer socket only — human-eyes-only channel.</td></tr>
+          <tr><td class="mono">toolbox <em>(MCP)</em></td><td class="mono">— none —</td><td class="mono">unreachable from Mac</td><td>Port 8080 has no mapping on purpose. Tool execution stays on the internal network.</td></tr>
+          <tr><td class="mono">pgvector-service</td><td class="mono">— none —</td><td class="mono">unreachable from Mac</td><td>Postgres is fully internal. To use psql, go <em>through</em> the container.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col">
+    <p>Note what "no <code>ports:</code>" does <em>not</em> mean. Postgres is running and listening on 5432 right now, and <code>langchain_service</code> talks to it constantly. It's simply invisible from outside the Docker network. Absence of a port mapping is a security posture, not a disabled service — and your file uses it as one twice, deliberately.</p>
+    <p>To get a shell on the internal-only database anyway:</p>
+    <pre><code>docker exec -it pgvector_service psql -U admin -d vectordb</code></pre>
+    <p><code>docker exec</code> runs a new process <em>inside</em> an already-running container, so it lands on the inside of the network boundary and needs no published port.</p>
+  </div>
+</section>
+
+<!-- ================= 08 ================= -->
+<section id="s8">
+  <div class="sec-head">
+    <span class="sec-num">08</span>
+    <h2>The network you can't see in Docker Desktop</h2>
+  </div>
+  <div class="col">
+    <p>Your Docker Desktop sidebar has Containers, Images, Volumes, and Builds — but no Networks tab. Compose still created one: <code>llm_monitor_default</code>. Every service joined it automatically, and it is the reason your system works at all.</p>
+    <p>On that network, <strong>the service key is a DNS hostname</strong>. Not the container name, not the image — the service key from the YAML. Docker runs an embedded DNS server that resolves it to the container's current IP.</p>
+    <pre><code><span class="cm">// server/appsettings.json — YARP's upstream</span>
+"Destinations": { "primary": { "Address": "<span class="hi">http://langchain_service:5000/</span>" } }</code></pre>
+    <p>Two things about that URL are worth sitting with:</p>
+    <ul>
+      <li><code>langchain_service</code> is the compose service key, resolved by Docker's DNS.</li>
+      <li>The port is <strong>5000, the container-side port</strong> — not 5001. Port <em>mappings do not exist</em> on the internal network. Containers always talk to each other on the real, unmapped ports.</li>
+    </ul>
+    <p>The same pattern runs through the rest of your environment variables: <code>http://toolbox:8080/mcp</code> (a port with no host mapping at all), <code>http://dotnet_server:8080/v1</code> (8080, not 5000), <code>langfuse-postgres:5432</code>, <code>http://ollama:11434</code>.</p>
+    <div class="note">
+      <p><span class="label">The classic failure</span><code>localhost</code> inside a container means <em>that container</em>, not your Mac and not another service. If <code>OPENAI_API_BASE_URL</code> said <code>http://localhost:5000/v1</code>, OpenWebUI would search its own filesystem for a gateway and fail with connection refused. Inside the compose network: use service names. From your Mac's browser or terminal: use <code>localhost</code> plus the host-side port. Two different address spaces, and every "it works in my browser but the container can't reach it" bug lives in the gap between them.</p>
+    </div>
+    <p>Also note <code>AllowedHosts=localhost;127.0.0.1;toolbox</code> on the toolbox service. Because callers address it as <code>toolbox</code>, that literal name has to appear in its Host-header allowlist or every request comes back 400. A DNS name isn't just plumbing — it becomes part of the HTTP request.</p>
+    <p>To see the network Docker Desktop won't show you:</p>
+    <pre><code>docker network ls
+docker network inspect llm_monitor_default   <span class="cm"># every container + its internal IP</span></code></pre>
+  </div>
+</section>
+
+<!-- ================= 09 ================= -->
+<section id="s9">
+  <div class="sec-head">
+    <span class="sec-num">09</span>
+    <h2><code>build:</code> versus <code>image:</code> — and having both</h2>
+  </div>
+  <div class="col">
+    <p>Each service answers one question: where does my image come from?</p>
+  </div>
+  <div class="wide">
+    <div class="grid2">
+      <div class="panel">
+        <h4><code>build:</code> — bake it here</h4>
+        <p>Compose runs a build from your source and names the result <code>llm_monitor-&lt;service&gt;</code>. Your code changes are only picked up by a rebuild.</p>
+        <p>Two services: <code>dotnet_server</code>, <code>langchain_service</code>.</p>
+        <span class="where">→ appears in Builds tab + Images tab</span>
+      </div>
+      <div class="panel">
+        <h4><code>image:</code> — download it</h4>
+        <p>Compose pulls the named tag from a registry, if it isn't already local. No build, no Builds row.</p>
+        <p>Fourteen services, including your own <code>toolbox</code>, which is built in a separate repo and consumed here as a published artifact.</p>
+        <span class="where">→ appears in Images tab only</span>
+      </div>
+    </div>
+  </div>
+  <div class="col">
+    <h3>Tags are the version, and floating tags bite</h3>
+    <p>The part after the colon is the tag. <code>pgvector/pgvector:pg16</code> and <code>ghcr.io/open-webui/open-webui:0.10.2</code> are pinned; <code>ollama/ollama:latest</code> and the observability images are floating. A floating tag means the image you get today and the image you got last month may differ with nothing in your repo to show for it — which is precisely the reasoning in your own comment on the OpenWebUI pin. <code>latest</code> is not a promise. It's just the default label.</p>
+
+    <h3>Your release override, which uses both keys at once</h3>
+    <p><code>docker-compose.release.yml</code> adds an <code>image:</code> to the two services that already have <code>build:</code>:</p>
+    <pre><code>services:
+  dotnet_server:
+    image: ghcr.io/timothy-lee-grant/llm_monitor-gateway:${LLM_MONITOR_VERSION:-latest}</code></pre>
+    <p>Holding both is deliberate and it's the standard Compose idiom. <code>docker compose build</code> still builds from source and tags the result with that registry name; <code>docker compose pull</code> / <code>up</code> fetch the published image and never invoke a build. One file, two modes: developing on source, or running someone's published release. Applied by stacking files, later ones winning:</p>
+    <pre><code>docker compose -f docker-compose.yaml -f docker-compose.release.yml up</code></pre>
+    <p>That's the same layering mechanism as the <code>${GPU}</code> string injector your <code>build.sh</code> has a TODO about — <code>-f</code> flags are read in order and merged, so a later file overrides keys set by an earlier one.</p>
+  </div>
+</section>
+
+<!-- ================= 10 ================= -->
+<section id="s10">
+  <div class="sec-head">
+    <span class="sec-num">10</span>
+    <h2>Startup order, and why "started" isn't "ready"</h2>
+  </div>
+  <div class="col">
+    <p>Containers start in parallel unless told otherwise. <code>depends_on</code> imposes order — but the plain form is weaker than it looks:</p>
+    <pre><code>openwebui:
+  depends_on:
+    - dotnet_server        <span class="cm"># waits for the container to EXIST. That's all.</span>
+
+langchain_service:
+  depends_on:
+    pgvector-service:
+      condition: <span class="hi">service_healthy</span>   <span class="cm"># waits for the healthcheck to PASS</span>
+    toolbox:
+      condition: <span class="hi">service_healthy</span></code></pre>
+    <p>A Postgres container exists within milliseconds and is ready to accept queries several seconds later. Without <code>condition: service_healthy</code>, your ingestion would fire into a database still starting up. That's the whole reason the healthchecks exist.</p>
+    <p>A healthcheck is just a command Docker runs inside the container on a schedule; exit 0 means healthy. Yours are shaped by what each image actually ships:</p>
+    <ul>
+      <li><strong>toolbox</strong> — <code>curl -f http://localhost:8080/health</code>. Here <code>localhost</code> is correct: the check runs <em>inside</em> that container.</li>
+      <li><strong>langchain_service</strong> — a stdlib Python one-liner, because <code>python:3.11-slim</code> ships neither curl nor wget. The image constrains the probe.</li>
+      <li><strong>pgvector-service</strong> — <code>pg_isready</code>, the tool Postgres provides for exactly this.</li>
+    </ul>
+    <p><code>start_period: 20s</code> on langchain is grace time: failures during it don't count against <code>retries</code>. It has to cover image boot <em>plus</em> the one-time RAG ingestion your entrypoint runs before gunicorn starts. When you expand the group row in Docker Desktop, the health state shows next to each container — that's this machinery surfacing.</p>
+    <p>The dependency chain your file describes, end to end:</p>
+    <pre><code>pgvector-service ─┐
+                  ├─(healthy)→ langchain_service ─(healthy)→ dotnet_server ─(started)→ openwebui
+toolbox ──────────┘</code></pre>
+  </div>
+</section>
+
+<!-- ================= 11 ================= -->
+<section id="s11">
+  <div class="sec-head">
+    <span class="sec-num">11</span>
+    <h2>The eleven services that aren't there</h2>
+  </div>
+  <div class="col">
+    <p>Here's the arithmetic that explains all four of your screens at once.</p>
+  </div>
+  <div class="wide">
+    <div class="counts">
+      <div class="count"><span class="num">16</span><span class="cap">services defined</span></div>
+      <div class="count"><span class="num">5</span><span class="cap">with no profile</span></div>
+      <div class="count"><span class="num">10</span><span class="cap">profile: obs</span></div>
+      <div class="count"><span class="num">1</span><span class="cap">profile: local-live</span></div>
+    </div>
+  </div>
+  <div class="col">
+    <p>A service carrying <code>profiles: ["obs"]</code> or <code>["local-live"]</code> is <strong>inert</strong> unless that profile is activated. Not stopped — never created. No container, no image pulled, no volume made. It is as if those lines weren't in the file.</p>
+    <p>So: five profile-free services → five containers → five images, one apiece, none shared. Your screens agree exactly.</p>
+    <p>And the volumes: nine are declared, three exist. The six missing ones (<code>ollama_data</code>, <code>prometheus_data</code>, <code>grafana_data</code>, <code>langfuse_pg_data</code>, <code>clickhouse_data</code>, <code>minio_data</code>) all belong to profiled services. A volume is created lazily, when a container first needs it. Declaring one costs nothing.</p>
+    <p>Activation is a flag:</p>
+    <pre><code>./build.sh --obs                       <span class="cm"># → --profile obs → 10 more containers</span>
+docker compose --profile local-live up  <span class="cm"># → ollama joins</span>
+docker compose --profile "*" down       <span class="cm"># → every profile, so nothing is orphaned</span></code></pre>
+    <p>That last one is the first real command in <code>build.sh</code>, and the <code>"*"</code> matters: <code>down</code> without it only tears down profile-free services, leaving obs containers from a previous run alive and confusing.</p>
+    <p>Run <code>./build.sh --obs</code> and Docker Desktop changes dramatically — 15 containers in the group, ten more images pulled, five new volumes. Nothing about your YAML changed; you only turned on a subset.</p>
+  </div>
+</section>
+
+<!-- ================= 12 ================= -->
+<section id="s12">
+  <div class="sec-head">
+    <span class="sec-num">12</span>
+    <h2><code>build.sh</code>, line by line</h2>
+  </div>
+  <div class="col">
+    <p>Every artifact on your screen was produced by this script. Reading it in order is the fastest way to connect the two.</p>
+    <pre><code><span class="hi">docker compose -p llm_monitor --profile "*" down --remove-orphans</span></code></pre>
+    <p>Stops and deletes every container in the project, across all profiles, plus any left over from a config that no longer exists. Volumes survive — <code>down</code> never removes them without <code>-v</code>. This is why your chat history and embeddings outlast every rebuild.</p>
+
+    <pre><code><span class="hi">docker compose -p llm_monitor -f docker-compose.yaml build</span></code></pre>
+    <p>Builds the two services with <code>build:</code>, using the layer cache. Result: two rows in Builds, two refreshed <code>llm_monitor-*</code> images. Nothing else is touched.</p>
+
+    <pre><code><span class="hi">docker compose -p llm_monitor -f docker-compose.yaml up --force-recreate -d</span></code></pre>
+    <p>Creates and starts containers in dependency order, pulling any missing registry image first. <code>--force-recreate</code> replaces containers even if their config is unchanged — which discards each container's writable layer, making the volume boundary from §06 the thing that decides what you keep. <code>-d</code> detaches so the containers keep running after the script exits.</p>
+
+    <pre><code><span class="hi">docker image prune -f</span></code></pre>
+    <p>Deletes dangling images — the previous <code>llm_monitor-*</code> builds, now untagged because the new build took their names. This is why your Images tab is a clean five rows with no <code>&lt;none&gt;</code> entries, and why disk usage doesn't creep with every rebuild.</p>
+
+    <h3>Where the environment goes</h3>
+    <p>Three layers feed values into containers, and it helps to see them as a chain:</p>
+    <pre><code>build.sh    export LLM_MODE="$MODE"
+              ↓
+compose     - LLM_MODE=${LLM_MODE:-mock}        <span class="cm"># shell var, else default</span>
+              ↓
+container   os.environ["LLM_MODE"]</code></pre>
+    <p><code>${VAR:-default}</code> reads from your shell or the <code>.env</code> file next to the compose file, falling back to the default. Note the deliberate difference between <code>${LLM_MODE:-mock}</code> and <code>${AZURE_OPENAI_API_KEY:-}</code>: the second defaults to an <em>empty string</em>, which your factory's <code>_require_env</code> treats as missing and fails loudly on. Empty-as-default is a design choice — it converts a silent misconfiguration into a startup crash with a message.</p>
+    <p>Two more things follow from this. Environment values are read at container <em>creation</em>, so changing <code>.env</code> requires <code>up</code> again, not just a restart. And <code>docker inspect dotnet_server</code> will print the fully resolved environment — including any secrets — which is worth remembering before pasting that output anywhere.</p>
+  </div>
+</section>
+
+<!-- ================= 13 ================= -->
+<section id="s13">
+  <div class="sec-head">
+    <span class="sec-num">13</span>
+    <h2>Every button, and the command behind it</h2>
+  </div>
+  <div class="col">
+    <p>Docker Desktop is a GUI over the same CLI. Knowing the pairing means you can move between them freely.</p>
+  </div>
+  <div class="wide">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>In Docker Desktop</th><th>Equivalent command</th><th>What to know</th></tr></thead>
+        <tbody>
+          <tr><td>Containers → the <code>&gt;</code> chevron</td><td class="mono">docker compose -p llm_monitor ps</td><td>Expands the project group into the five real containers.</td></tr>
+          <tr><td>Containers → stop square</td><td class="mono">docker compose -p llm_monitor stop</td><td>Stops but keeps containers; <code>start</code> resumes with the writable layer intact.</td></tr>
+          <tr><td>Containers → trash</td><td class="mono">docker compose -p llm_monitor down</td><td>Deletes containers. Images and volumes untouched.</td></tr>
+          <tr><td>Click a container name</td><td class="mono">docker logs -f dotnet_server</td><td>Opens Logs / Inspect / Terminal / Files tabs. Logs first — most answers are there.</td></tr>
+          <tr><td>Container → Exec tab</td><td class="mono">docker exec -it langchain_service bash</td><td>A shell inside the running container. Your best debugging tool by a distance.</td></tr>
+          <tr><td>Images → play button</td><td class="mono">docker run …</td><td>Avoid for this project — it starts a bare container with no network, env, or volumes. Always come in through Compose.</td></tr>
+          <tr><td>Images → trash</td><td class="mono">docker rmi &lt;image&gt;</td><td>Refuses while a container references it. Rebuilding is the fix, not force-deleting.</td></tr>
+          <tr><td>Volumes → trash</td><td class="mono">docker volume rm llm_monitor_pgdata</td><td>Irreversible. This is how you reset the database — and re-trigger <code>init.sql</code>.</td></tr>
+          <tr><td>Builds → a build row</td><td class="mono">docker compose build --progress=plain</td><td>Per-step timings; shows which layer is slow and which came from cache.</td></tr>
+          <tr><td><em>(no tab for this)</em></td><td class="mono">docker network inspect llm_monitor_default</td><td>The networking view Desktop doesn't offer.</td></tr>
+          <tr><td><em>(no tab for this)</em></td><td class="mono">docker stats</td><td>Live per-container CPU and memory.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col">
+    <p>One habit worth forming: when something is wrong, go <em>logs first, exec second, rebuild last</em>. Rebuilding is the slowest way to find out what happened and it destroys the evidence.</p>
+  </div>
+</section>
+
+<!-- ================= 14 ================= -->
+<section id="s14">
+  <div class="sec-head">
+    <span class="sec-num">14</span>
+    <h2>The confusions, settled</h2>
+  </div>
+  <div class="col">
+    <div class="answer">
+      <span class="label">Is my service name an image or a container?</span>
+      <p>Neither. It's a recipe key. It <em>becomes</em> the image name (prefixed with the project) if the service builds, and it <em>becomes</em> the container name unless <code>container_name:</code> overrides it — which in your project it always does. It also becomes the DNS hostname other containers use, and that one is never overridden by <code>container_name</code>.</p>
+    </div>
+
+    <h3>Quick answers</h3>
+    <ul>
+      <li><strong>Where did my code change go?</strong> Into the image only after <code>build</code>. Compose's <code>up</code> alone will happily restart the old image. Your <code>build.sh</code> always does both, in order.</li>
+      <li><strong>Why is my image huge?</strong> Base image plus dependencies, almost always. Multi-stage builds fix compiled languages; interpreted stacks are dominated by their package installs.</li>
+      <li><strong>Why can't the container reach my Mac's localhost?</strong> Because <code>localhost</code> is the container. Use <code>host.docker.internal</code> to reach the Mac, or a service name to reach a sibling.</li>
+      <li><strong>Why did my data vanish?</strong> It wasn't in a volume, or you ran <code>down -v</code>. Container filesystems are disposable by design.</li>
+      <li><strong>Why is a port "already allocated"?</strong> Two things want the same host-side port. Change the left number; the right one belongs to the app.</li>
+      <li><strong>Why is a service missing?</strong> Check for a <code>profiles:</code> key before anything else.</li>
+      <li><strong>Which name do I pass to a command?</strong> <code>docker compose &lt;cmd&gt; pgvector-service</code> (service key, hyphen). <code>docker &lt;cmd&gt; pgvector_service</code> (container name, underscore).</li>
+    </ul>
+
+    <h3>The four screens, in one sentence each</h3>
+    <ul>
+      <li><strong>Images</strong> — the frozen templates you have on disk, built here or pulled. They outlive containers.</li>
+      <li><strong>Containers</strong> — running instances, grouped by Compose project. Ephemeral by design.</li>
+      <li><strong>Volumes</strong> — the only storage that survives a recreate. Created lazily, named <code>&lt;project&gt;_&lt;key&gt;</code>.</li>
+      <li><strong>Builds</strong> — the history of images baked from your source, named after the build context folder.</li>
+    </ul>
+
+    <h3>Five commands to keep</h3>
+    <pre><code>docker compose -p llm_monitor ps                      <span class="cm"># what's actually running + health</span>
+docker compose -p llm_monitor logs -f langchain_service
+docker exec -it langchain_service bash                <span class="cm"># get inside</span>
+docker network inspect llm_monitor_default            <span class="cm"># who can talk to whom</span>
+docker system df                                      <span class="cm"># where the 7.95 GB went</span></code></pre>
+  </div>
+</section>
+
+<footer>
+  <div>Built from docker-compose.yaml, server/dockerfile, langchain_service/dockerfile, build.sh, docker-compose.release.yml, and server/appsettings.json — LLM_Monitor, August 2026.</div>
+</footer>
+
+</body>
+</html>
